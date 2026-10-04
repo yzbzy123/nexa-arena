@@ -126,7 +126,7 @@ export function App() {
           </div>
         </div>
       </div>
-      <footer className="app-footer"><span>免费游戏工具箱 · 作者：2ndWind</span><button onClick={() => copy("2583053476")}>QQ 2583053476 · 点击复制</button></footer>
+      <footer className="app-footer"><span>免费游戏工具箱 · 作者：2ndWind</span><button aria-label="复制QQ群号 1105050795" onClick={() => copy("1105050795")}>QQ群 1105050795 · 点击复制群号</button></footer>
     </div>
     <Toaster theme="light" position="bottom-right" richColors />
     </>

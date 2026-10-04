@@ -1099,13 +1099,13 @@ namespace NexaArena
             pageHost.BackColor = ModernTheme.Background;
             content.Controls.Add(pageHost, 0, 1);
 
-            Label footer = ModernTheme.Label("免费游戏工具箱     作者：2ndWind     QQ：2583053476  ·  点击复制",
+            Label footer = ModernTheme.Label("免费游戏工具箱     作者：2ndWind     QQ群：1105050795  ·  点击复制群号",
                 8F, FontStyle.Regular, Color.FromArgb(174, 186, 197));
             footer.BackColor = ModernTheme.Navy;
             footer.Padding = new Padding(26, 0, 0, 0);
             footer.Cursor = Cursors.Hand;
-            footer.AccessibleName = "复制作者 QQ 2583053476";
-            footer.Click += delegate { ToolUi.Copy("2583053476"); UpdateStatus("作者 QQ 已复制：2583053476"); };
+            footer.AccessibleName = "复制QQ群号 1105050795";
+            footer.Click += delegate { ToolUi.Copy("1105050795"); UpdateStatus("QQ群号已复制：1105050795"); };
             shell.Controls.Add(footer, 0, 3);
             switchPage = new ModernSwitchPage();
             CrosshairLibraryPage valorantCrosshairs = new CrosshairLibraryPage(true);

@@ -24,7 +24,7 @@ The C# backend executes display recovery, configuration repair, monitor and icon
 
 ## Brand Commitments
 
-Nexa Arena; free game toolbox; author 2ndWind; QQ 2583053476. Chinese-first light precision interface, consistent across pages.
+Nexa Arena; free game toolbox; author 2ndWind; QQ group 1105050795. Chinese-first light precision interface, consistent across pages.
 
 ## Quality Evidence
 

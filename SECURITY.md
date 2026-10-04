@@ -7,4 +7,4 @@ Nexa Arena can change Windows display, audio, process and system settings. Only 
 - Protected system, security and anti-cheat components are not disabled automatically.
 - The project does not inject code into games or bypass anti-cheat restrictions.
 
-For security reports, contact 2ndWind at QQ 2583053476. Do not post credentials, personal configuration files or private device logs in public issues.
+For security reports, contact project author 2ndWind through QQ group 1105050795 and arrange a private channel before sharing vulnerability details. Do not post credentials, personal configuration files or private device logs in public issues or group chats.
