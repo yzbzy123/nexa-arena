@@ -1,0 +1,41 @@
+# Build outputs
+/release/
+/dist/
+/dist-web/
+/release-*/
+/backups/
+/artifacts/
+/publish-staging/
+tools/webview2-sdk/net462/
+tools/webview2-sdk/download-*/
+*.exe
+*.dll
+*.pdb
+*.log
+*.dmp
+*.tmp
+*.tsbuildinfo
+
+# Frontend dependencies and generated files
+node_modules/
+web-ui/dist/
+.vite/
+.vite-temp/
+
+# Local design tooling
+web-ui/.impeccable/
+
+# User and machine-local files
+.env
+.env.*
+!.env.example
+*.local
+desktop.ini
+.DS_Store
+Thumbs.db
+.vs/
+.idea/
+.vscode/
+tools/*-profile/
+tools/*-review-*/
+tools/*verification-temp/

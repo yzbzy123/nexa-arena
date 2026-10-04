@@ -1,0 +1,172 @@
+{
+  "verifiedAt": "2026-10-03",
+  "gameDepot": "2347771",
+  "gameManifest": "4472721471834965775",
+  "references": [
+    "https://store.steampowered.com/news/posts/?appids=730",
+    "https://crosshair.club/static/js/crosshair.js?v=1790907189",
+    "https://crosshair.club/static/js/cs2-crosshair-render.js?v=1790907189"
+  ],
+  "presets": [
+    {
+      "name": "donk",
+      "resolution": "1280 × 960",
+      "oldCode": "CSGO-Tbejq-X9ZF4-FppRQ-TNK4C-eamjD",
+      "code": "CS44bpzNrNkisKXePKKWy7fZkfWjeNxiHAbQRO5oQjMWQj",
+      "payload": "ea01c0030400ffa5ff000000ff03020002ff0380910c5a000000000000000000",
+      "height": 960,
+      "style": 4,
+      "length": 2,
+      "gap": 2,
+      "thickness": 3,
+      "rgba": [
+        0,
+        255,
+        165,
+        255
+      ],
+      "dot": false,
+      "outline": 0
+    },
+    {
+      "name": "NiKo",
+      "resolution": "1280 × 960",
+      "oldCode": "CSGO-VT5h9-bzS2V-hZXPc-7WkTt-rVTVP",
+      "code": "CSr8ZYF3mqQhy3TvUiz5MrppUPLTZR8S3YPvqKGRbJhO9C",
+      "payload": "1501c0034400ff91ff000000ff04020000ff0380910c5a000000000000000000",
+      "height": 960,
+      "style": 4,
+      "length": 0,
+      "gap": 2,
+      "thickness": 4,
+      "rgba": [
+        0,
+        255,
+        145,
+        255
+      ],
+      "dot": true,
+      "outline": 0
+    },
+    {
+      "name": "m0NESY",
+      "resolution": "1280 × 960",
+      "oldCode": "CSGO-JJ6Kd-ZzT5c-XB6DH-cBXSn-vANoD",
+      "code": "CStLmGWwjzBrK84RGQeTkArGmNrWYe2cO7tBmvFAnXBEEQ",
+      "payload": "6a01c0030432fafaff000000ff02010002ff0380910c5a000000000000000000",
+      "height": 960,
+      "style": 4,
+      "length": 2,
+      "gap": 1,
+      "thickness": 2,
+      "rgba": [
+        50,
+        250,
+        250,
+        255
+      ],
+      "dot": false,
+      "outline": 0
+    },
+    {
+      "name": "ZywOo",
+      "resolution": "1280 × 960",
+      "oldCode": "CSGO-E2jCd-hNCZo-7usDy-FWxqV-LNtVQ",
+      "code": "CS5VD6DDR67rots4FLBGBbyRsPrGBRcnUQpjsfZJrsiFTY",
+      "payload": "a401c0030432fa32ff000000ff01020004ff0380910c5a000000000000000000",
+      "height": 960,
+      "style": 4,
+      "length": 4,
+      "gap": 2,
+      "thickness": 1,
+      "rgba": [
+        50,
+        250,
+        50,
+        255
+      ],
+      "dot": false,
+      "outline": 0
+    },
+    {
+      "name": "XANTARES",
+      "resolution": "1024 × 768",
+      "oldCode": "CSGO-G7wKC-xo9tZ-LoqAP-ozfSn-4UviB",
+      "code": "CSbnbYtHZNuyBSi9NqDTdEcScry4Pp9Ch8uiACYcZe3mhD",
+      "payload": "190100030432fa32c8000000c801050005ff07f2c3035a000000000000000000",
+      "height": 768,
+      "style": 4,
+      "length": 5,
+      "gap": 5,
+      "thickness": 1,
+      "rgba": [
+        50,
+        250,
+        50,
+        200
+      ],
+      "dot": false,
+      "outline": 0
+    },
+    {
+      "name": "s1mple",
+      "resolution": "1280 × 960",
+      "oldCode": "CSGO-jkmFu-YrpWJ-JqL2H-9DSTS-o4xLA",
+      "code": "CSTFwEeJqTGeVVoCvo5qkmF8pS8vX9KzqFpnNsMOB2xOym",
+      "payload": "fc01c0030432fafac8000000c802010002ff0380910c5a000000000000000000",
+      "height": 960,
+      "style": 4,
+      "length": 2,
+      "gap": 1,
+      "thickness": 2,
+      "rgba": [
+        50,
+        250,
+        250,
+        200
+      ],
+      "dot": false,
+      "outline": 0
+    },
+    {
+      "name": "magixx",
+      "resolution": "1920 × 1080",
+      "oldCode": "CSGO-dNSzX-JECfU-o6meB-Lr4SS-o4xLA",
+      "code": "CSztCTDvFfLcUvLQzkjtnm3AWDRvskhERbYWPzLv625Vab",
+      "payload": "ba0138040432fa32ff000000ff02010002ff07f2c3035a000000000000000000",
+      "height": 1080,
+      "style": 4,
+      "length": 2,
+      "gap": 1,
+      "thickness": 2,
+      "rgba": [
+        50,
+        250,
+        50,
+        255
+      ],
+      "dot": false,
+      "outline": 0
+    },
+    {
+      "name": "broky",
+      "resolution": "1280 × 960",
+      "oldCode": "CSGO-jYsDv-9CmCh-noR3O-svGiC-ekjWA",
+      "code": "CSWnevbWAB6jTFP3PUL6VXOFEtGSKm8MzXmBe5ZUJtjhPn",
+      "payload": "ff01c00304fafa32c8000000c802020004ff0380910c5a000000000000000000",
+      "height": 960,
+      "style": 4,
+      "length": 4,
+      "gap": 2,
+      "thickness": 2,
+      "rgba": [
+        250,
+        250,
+        50,
+        200
+      ],
+      "dot": false,
+      "outline": 0
+    }
+  ]
+}

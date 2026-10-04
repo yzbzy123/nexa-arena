@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web-ui/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --prefix web-ui
+      - name: Configure WebView2 SDK
+        shell: pwsh
+        run: ./tools/Setup-WebView2.ps1
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -NoPublish
+      - name: Test toolbox
+        shell: pwsh
+        run: ./tools/Test-Toolbox.ps1
+      - name: Test restore policy
+        shell: pwsh
+        run: ./tools/Test-Restore.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexa-arena-windows-x64
+          path: |
+            dist-web/NexaArena.exe
+            dist-web/*.dll
+            dist-web/*LICENSE*.txt
+            dist-web/web/
