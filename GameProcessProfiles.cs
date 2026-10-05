@@ -138,9 +138,11 @@ namespace NexaArena
                         snapshot.PriorityChanged=snapshot.Priority!=snapshot.WrittenPriority;
                         snapshot.AffinityChanged=snapshot.Affinity!=snapshot.WrittenAffinity;
                         SaveSessions();
-                        if(snapshot.PriorityChanged)process.PriorityClass=snapshot.WrittenPriority;
-                        if(snapshot.AffinityChanged)process.ProcessorAffinity=snapshot.WrittenAffinity;
-                        if(process.PriorityClass!=snapshot.WrittenPriority||process.ProcessorAffinity!=snapshot.WrittenAffinity)throw new InvalidOperationException("进程配置读回校验未通过，停止并尝试还原。");
+                        GameOptimizer.WriteAndVerify(delegate {
+                            if(snapshot.PriorityChanged)process.PriorityClass=snapshot.WrittenPriority;
+                            if(snapshot.AffinityChanged)process.ProcessorAffinity=snapshot.WrittenAffinity;
+                        },process.Refresh,delegate{return process.PriorityClass==snapshot.WrittenPriority&&process.ProcessorAffinity==snapshot.WrittenAffinity;},
+                            "进程配置读回校验未通过，停止并尝试还原。");
                         message="已处理 "+profile.Game+" 当前进程；游戏退出或停止监控后结束本次会话。";
                     }
                 int beforeCleanup=originals.Count;
@@ -171,8 +173,8 @@ namespace NexaArena
                         var saved=entry.Value;
                         if(!string.Equals(process.ProcessName,Path.GetFileNameWithoutExtension(GameOptimizer.ExecutableName(saved.Game)),StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("进程身份不匹配，未覆盖。");
                         bool affinityDone=!saved.AffinityChanged||process.ProcessorAffinity==saved.Affinity,priorityDone=!saved.PriorityChanged||process.PriorityClass==saved.Priority;
-                        if(!affinityDone&&process.ProcessorAffinity==saved.WrittenAffinity){process.ProcessorAffinity=saved.Affinity;affinityDone=process.ProcessorAffinity==saved.Affinity;}
-                        if(!priorityDone&&process.PriorityClass==saved.WrittenPriority){process.PriorityClass=saved.Priority;priorityDone=process.PriorityClass==saved.Priority;}
+                        if(!affinityDone&&process.ProcessorAffinity==saved.WrittenAffinity){GameOptimizer.WriteAndVerify(delegate{process.ProcessorAffinity=saved.Affinity;},process.Refresh,delegate{return process.ProcessorAffinity==saved.Affinity;},"CPU 亲和性还原未通过校验，保留会话备份。");affinityDone=true;}
+                        if(!priorityDone&&process.PriorityClass==saved.WrittenPriority){GameOptimizer.WriteAndVerify(delegate{process.PriorityClass=saved.Priority;},process.Refresh,delegate{return process.PriorityClass==saved.Priority;},"进程优先级还原未通过校验，保留会话备份。");priorityDone=true;}
                         if(affinityDone&&priorityDone)originals.Remove(entry.Key);
                     }
                 }

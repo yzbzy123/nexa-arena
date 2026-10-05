@@ -1,4 +1,4 @@
-param([switch]$NativeRead,[switch]$BuildPreview,[switch]$CaptureSmoke)
+param([switch]$NativeRead,[switch]$BuildPreview,[switch]$CaptureSmoke,[string]$NvidiaCs2Path)
 $ErrorActionPreference='Stop'
 if($CaptureSmoke){throw '帧率记录功能已移除；CaptureSmoke 不再运行。'}
 $projectRoot=Split-Path -Parent $PSScriptRoot
@@ -16,7 +16,10 @@ $resources=@("/resource:$projectRoot\assets\ThirdPartyNotices.txt,NexaArena.Thir
 $testExe=Join-Path $PSScriptRoot 'ToolboxTests.exe'
 & $compiler /nologo /target:exe /platform:anycpu /main:NexaArena.ToolboxTests "/out:$testExe" @references @resources @sources "$PSScriptRoot\ToolboxTests.cs"
 if($LASTEXITCODE -ne 0){throw '工具箱测试编译失败。'}
-if($NativeRead){& $testExe --native-read}else{& $testExe}
+$testArguments=@()
+if($NativeRead){$testArguments+='--native-read'}
+if(-not [string]::IsNullOrWhiteSpace($NvidiaCs2Path)){$testArguments+='--nvidia-cs2-read';$testArguments+=$NvidiaCs2Path}
+& $testExe @testArguments
 if($LASTEXITCODE -ne 0){throw '工具箱测试失败。'}
 if($BuildPreview){
     & $compiler /nologo /target:winexe /platform:anycpu /main:NexaArena.ToolboxPreview "/out:$PSScriptRoot\NexaArenaPreview.exe" "/win32manifest:$PSScriptRoot\ui-probe.manifest" @references @resources @sources "$PSScriptRoot\ToolboxPreview.cs"

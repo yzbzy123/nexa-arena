@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Check, RefreshCcw, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -33,15 +33,16 @@ export function ManagementWorkbench({busy,preview,run}:{busy:string|null;preview
   const [riskAcknowledged,setRiskAcknowledged]=useState(false)
   const [host,setHost]=useState("223.5.5.5")
   const [test,setTest]=useState<{sent:number;received:number;lost:number;averageMs:number;minMs:number;maxMs:number;jitterMs:number;note:string}|null>(null)
+  const catalogRequest=useRef(0)
   const locked=preview||!!busy
   useEffect(()=>{
-    let active=true;setLoading(true);setItems([]);setSelected(null);setQuery("");setError(null)
+    let active=true;const request=++catalogRequest.current;setLoading(true);setItems([]);setSelected(null);setQuery("");setError(null)
     if(module==="apps"||module==="readiness"||module==="repair"){setLoading(false);return}
     if(!isDesktop){setLoading(false);return}
-    invoke<Catalog>("manager.inspect",{module}).then(value=>{if(active)setItems(value.items)}).catch(cause=>{if(active)setError(cause.message)}).finally(()=>{if(active)setLoading(false)})
-    return()=>{active=false}
+    invoke<Catalog>("manager.inspect",{module}).then(value=>{if(active&&request===catalogRequest.current)setItems(value.items)}).catch(cause=>{if(active&&request===catalogRequest.current)setError(cause.message)}).finally(()=>{if(active&&request===catalogRequest.current)setLoading(false)})
+    return()=>{active=false;if(request===catalogRequest.current)catalogRequest.current++}
   },[module])
-  async function refresh(){setLoading(true);try{const value=await invoke<Catalog>("manager.inspect",{module});setItems(value.items);setError(null);if(selected){const next=value.items.find(x=>x.id===selected.id);setSelected(next??null)}}catch(cause){setError(cause instanceof Error?cause.message:"读取失败")}finally{setLoading(false)}}
+  async function refresh(){const request=++catalogRequest.current;setLoading(true);try{const value=await invoke<Catalog>("manager.inspect",{module});if(request!==catalogRequest.current)return;setItems(value.items);setError(null);setSelected(current=>current?value.items.find(x=>x.id===current.id)??null:null)}catch(cause){if(request===catalogRequest.current)setError(cause instanceof Error?cause.message:"读取失败")}finally{if(request===catalogRequest.current)setLoading(false)}}
   const shown=items.filter(x=>`${x.title} ${x.detail}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   function pick(item:Item){setSelected(item);setChoice(item.currentChoice||"")}
   const experimental=module==="device-msi"||module==="interrupt-affinity"
@@ -51,7 +52,7 @@ export function ManagementWorkbench({busy,preview,run}:{busy:string|null;preview
       {module!=="apps"&&module!=="readiness"&&module!=="repair"&&<><Field className="min-w-48 flex-1"><FieldLabel htmlFor="manager-search">搜索项目</FieldLabel><Input id="manager-search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="输入名称、任务路径或网卡参数…" /></Field>
       <Button variant="outline" disabled={!isDesktop||loading||!!busy} onClick={refresh}><RefreshCcw data-icon="inline-start"/>刷新列表</Button></>}</FieldGroup>
     {module==="apps"?<AppxPanel busy={busy} preview={preview} run={run}/>:module==="readiness"?<ReadinessPanel busy={busy} run={run}/>:module==="repair"?<RepairPanel busy={busy} preview={preview} run={run}/>:<>
-    <Alert><AlertTitle>只修改明确选中的项目</AlertTitle><AlertDescription>{module.startsWith("nvidia")?"通过 NVIDIA 官方 NVAPI 读写驱动配置。全局项影响全部程序和电池功耗；游戏项需先选择主程序，共享多个程序的配置只读。不改变分辨率或禁用设备。":descriptions[module]}</AlertDescription></Alert>
+    <Alert><AlertTitle>只修改明确选中的项目</AlertTitle><AlertDescription>{module.startsWith("nvidia")?"通过 NVIDIA 官方 NVAPI 读写驱动配置。全局项影响全部程序和电池功耗；游戏项需先选择主程序，仅允许已确认属于该游戏的关联程序，未知或跨游戏关联只读。不改变分辨率或禁用设备。":descriptions[module]}</AlertDescription></Alert>
     {error&&<Alert variant="destructive"><AlertTitle>列表读取失败</AlertTitle><AlertDescription>{error} 请刷新或切换其他模块。</AlertDescription></Alert>}
     <div className="management-layout">
       <div><p className="section-caption mb-3" role="status">{loading?"正在读取…":`显示 ${shown.length} / ${items.length} 项 · 原值备份 ${items.filter(x=>x.applied).length} 项`}</p>

@@ -76,6 +76,8 @@ namespace NexaArena
             }
         }
 
+        internal static void WriteAndVerify(Action write,Action refresh,Func<bool> matches,string failure)
+        {write();refresh();if(!matches())throw new InvalidOperationException(failure);}
         internal static object SetPriority(string game,bool enabled)
         {
             ExecutableName(game);
@@ -90,8 +92,13 @@ namespace NexaArena
                         current!=ProcessPriorityClass.Idle)
                         throw new InvalidOperationException("当前进程已经不是普通或更低优先级，未做更改。 ");
                     originalPriorities[process.Id]=new PrioritySnapshot {Started=started,Original=current};
-                    try { process.PriorityClass=ProcessPriorityClass.AboveNormal; }
-                    catch { originalPriorities.Remove(process.Id);throw; }
+                    try { WriteAndVerify(delegate{process.PriorityClass=ProcessPriorityClass.AboveNormal;},process.Refresh,
+                        delegate{return process.PriorityClass==ProcessPriorityClass.AboveNormal;},"优先级写后校验未通过，原值保留，请核对当前进程。"); }
+                    catch
+                    {
+                        try{process.Refresh();if(process.PriorityClass==current)originalPriorities.Remove(process.Id);}catch{}
+                        throw;
+                    }
                 }
                 else
                 {
@@ -100,7 +107,8 @@ namespace NexaArena
                         throw new InvalidOperationException("没有这次会话保存的原优先级，不会擅自覆盖现有设置。 ");
                     if(process.PriorityClass!=ProcessPriorityClass.AboveNormal)
                         throw new InvalidOperationException("游戏优先级已被其他程序修改，请在任务管理器中确认；此处不会覆盖。 ");
-                    process.PriorityClass=saved.Original;
+                    WriteAndVerify(delegate{process.PriorityClass=saved.Original;},process.Refresh,
+                        delegate{return process.PriorityClass==saved.Original;},"优先级还原校验未通过，原值备份保留。");
                     originalPriorities.Remove(process.Id);
                 }
             }

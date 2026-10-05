@@ -56,6 +56,10 @@ namespace NexaArena
         }
         private ManagerBackup Find(string module,string id){return ledger.Items.FirstOrDefault(x=>x.Module==module&&x.Id==id);}
         internal bool HasBackup(string module,string id){lock(gate)return Find(module,id)!=null;}
+        private void AddBackup(ManagerBackup saved)
+        {ledger.Items.Add(saved);try{Save();}catch{ledger.Items.Remove(saved);throw;}}
+        private void RemoveBackup(ManagerBackup saved)
+        {int index=ledger.Items.IndexOf(saved);ledger.Items.Remove(saved);try{Save();}catch{if(index>=0)ledger.Items.Insert(index,saved);throw;}}
         internal void SelectGamePath(string game,string path){lock(gate){var windows=backend as WindowsManagerBackend;if(windows!=null)windows.SelectGamePath(game,path);}}
         private void Save()
         {
@@ -90,11 +94,12 @@ namespace NexaArena
                 if(restore)
                 {
                     if(saved==null)throw new InvalidOperationException("没有此项目的原值备份。");
-                    if(current.Raw==saved.Original){ledger.Items.Remove(saved);Save();return new {ok=true,message="现值已是原值，已清理对应备份"};}
+                    if(current.Raw==saved.Original){RemoveBackup(saved);return new {ok=true,message="现值已是原值，已清理对应备份"};}
                     if(current.Raw!=saved.Written)throw new InvalidOperationException("现值已被其他程序修改，已保留备份；不会覆盖。");
                     backend.Write(module,id,saved.Original);
-                    if(backend.Read(module,id).Raw!=saved.Original)throw new InvalidOperationException("原值读回不一致，备份保留。");
-                    ledger.Items.Remove(saved);Save();
+                    var restored=backend.Read(module,id);
+                    if(restored.Identity!=saved.Identity||restored.Raw!=saved.Original)throw new InvalidOperationException("原值或目标身份读回不一致，备份保留。");
+                    RemoveBackup(saved);
                 }
                 else
                 {
@@ -107,7 +112,7 @@ namespace NexaArena
                     }
                     if(current.Raw==desired)return new {ok=true,message="当前已是所选值，无需修改"};
                     saved=new ManagerBackup {Module=module,Id=id,Identity=current.Identity,Original=current.Raw,Written=desired};
-                    ledger.Items.Add(saved);Save();
+                    AddBackup(saved);
                     try
                     {
                         backend.Write(module,id,desired);
@@ -118,7 +123,7 @@ namespace NexaArena
                     {
                         try
                         {
-                            if(backend.Read(module,id).Identity==saved.Identity){backend.Write(module,id,current.Raw);if(backend.Read(module,id).Raw==current.Raw){ledger.Items.Remove(saved);Save();}}
+                            if(backend.Read(module,id).Identity==saved.Identity){backend.Write(module,id,current.Raw);var reverted=backend.Read(module,id);if(reverted.Identity==saved.Identity&&reverted.Raw==current.Raw)RemoveBackup(saved);}
                         }
                         catch { }
                         throw;

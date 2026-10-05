@@ -16,6 +16,7 @@ namespace NexaArena
         private static void Check(bool ok,string text){if(!ok)throw new Exception(text);}
         private static void Equal(double actual,double expected){Check(Math.Abs(actual-expected)<1e-8,"Expected "+expected+", got "+actual);}
         private static void Throws(Action action){try{action();}catch(ArgumentException){return;}catch(InvalidOperationException){return;}throw new Exception("Expected validation failure");}
+        private static void BackupFailure(Action action){try{action();}catch(IOException){return;}catch(UnauthorizedAccessException){return;}throw new Exception("Expected backup persistence failure");}
         private static void Test(string name,Action action){action();count++;Console.WriteLine("PASS "+name);}
         [STAThread]
         private static int Main(string[] args)
@@ -492,6 +493,24 @@ namespace NexaArena
                     });
                 }
                 Test("retired frame recorder is not bundled",delegate{Check(Assembly.GetExecutingAssembly().GetManifestResourceStream("NexaArena.PresentMon.exe")==null,"PresentMon still bundled");});
+                Test("process writes refresh cached values before verifying success",delegate{
+                    int actual=0,cached=0;string order="";
+                    Throws(delegate{GameOptimizer.WriteAndVerify(delegate{cached=1;order+="write ";},delegate{cached=actual;order+="refresh ";},delegate{order+="verify";return cached==1;},"silent no-op");});
+                    Check(order=="write refresh verify"&&cached==0,"cached setter value was accepted as native state");
+                    GameOptimizer.WriteAndVerify(delegate{actual=1;},delegate{cached=actual;},delegate{return cached==1;},"valid write rejected");
+                });
+                Test("system tuning never reports success for silently ignored writes",delegate{
+                    WithTuning(delegate(string file,FakeTuning api){api.Values["game-mode"]="missing";api.IgnoreWrites=true;var tune=new SystemTuning(api,file);Check(!TuningSucceeded(tune.Change(new[]{"game-mode"},null,false)),"unchanged value reported success");Check(api.Values["game-mode"]=="missing","unexpected native state");});
+                });
+                Test("system tuning does not write or retain unsaved originals on backup failure",delegate{
+                    WithTuning(delegate(string file,FakeTuning api){Directory.CreateDirectory(file+".tmp");var tune=new SystemTuning(api,file);Check(!TuningSucceeded(tune.Change(new[]{"game-mode"},null,false))&&api.Writes==0,"write proceeded without durable backup");Directory.Delete(file+".tmp");Check(TuningSucceeded(tune.Change(new[]{"game-mode"},null,false)),"failed backup remained in memory");});
+                });
+                Test("system tuning preserves backup after silent restore failure",delegate{
+                    WithTuning(delegate(string file,FakeTuning api){var tune=new SystemTuning(api,file);tune.Change(new[]{"game-mode"},null,false);api.IgnoreWrites=true;Check(!TuningSucceeded(tune.Change(new[]{"game-mode"},null,true)),"silent restore reported success");api.IgnoreWrites=false;Check(TuningSucceeded(tune.Change(new[]{"game-mode"},null,true)),"restore original backup lost");});
+                });
+                Test("system tuning recovers after backup cleanup failure without rewriting original",delegate{
+                    WithTuning(delegate(string file,FakeTuning api){var tune=new SystemTuning(api,file);tune.Change(new[]{"game-mode"},null,false);Directory.CreateDirectory(file+".tmp");Check(!TuningSucceeded(tune.Change(new[]{"game-mode"},null,true)),"failed backup cleanup reported success");int writes=api.Writes;Directory.Delete(file+".tmp");Check(TuningSucceeded(tune.Change(new[]{"game-mode"},null,true))&&api.Writes==writes,"original was rewritten or backup lost");});
+                });
                 Test("optimization originals survive reopen and missing values are restored",delegate{
                     WithTuning(delegate(string file,FakeTuning api){api.Values["game-mode"]="missing";var tune=new SystemTuning(api,file);tune.Change(new[]{"game-mode"},null,false);Check(api.Values["game-mode"]=="d:1","not applied");new SystemTuning(api,file).Change(new[]{"game-mode"},null,true);Check(api.Values["game-mode"]=="missing","missing original not restored");});
                 });
@@ -510,6 +529,83 @@ namespace NexaArena
                     Check(!MemoryCleaner.ShouldClean(2048,1024,1024,1024,true,true,false),"free at boundary purged");
                     Check(!MemoryCleaner.ShouldClean(2048,512,1024,1024,true,false,false),"purged without game");
                     Check(!MemoryCleaner.ShouldClean(2048,512,1024,1024,true,true,true),"cooldown ignored");
+                });
+                Test("NVIDIA predefined CS2 main and alternate executable are writable",delegate{
+                    var apps=NvidiaApps("cs2.exe","csgos2.exe");Check(NvidiaGameSettings.AssociationBlockReason("CS2",@"D:\Games\CS2\cs2.exe",2,apps,true)==null,"CS2 aliases were blocked");
+                });
+                Test("NVIDIA recognizes a single main executable for either game",delegate{
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",@"D:\Games\CS2\cs2.exe",1,NvidiaApps("CS2.EXE"),false)==null,"single CS2 executable blocked");
+                    Check(NvidiaGameSettings.AssociationBlockReason("VALORANT",@"D:\Games\VAL\VALORANT-Win64-Shipping.exe",1,NvidiaApps("VALORANT-Win64-Shipping.exe"),false)==null,"single VALORANT executable blocked");
+                });
+                Test("NVIDIA rejects unknown and cross-game associations",delegate{
+                    foreach(string other in new[]{"csgo.exe","other.exe","VALORANT-Win64-Shipping.exe","cs2.exe.bak","*cs2.exe"})
+                        Check(NvidiaGameSettings.AssociationBlockReason("CS2",@"D:\Games\CS2\cs2.exe",2,NvidiaApps("cs2.exe",other),true)!=null,"foreign association accepted: "+other);
+                    Check(NvidiaGameSettings.AssociationBlockReason("VALORANT",@"D:\Games\VAL\VALORANT-Win64-Shipping.exe",2,NvidiaApps("VALORANT-Win64-Shipping.exe","cs2.exe"),true)!=null,"CS2 accepted as VALORANT");
+                });
+                Test("NVIDIA rejects missing incomplete and duplicate association data",delegate{
+                    string path=@"D:\Games\CS2\cs2.exe";
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,2,NvidiaApps("cs2.exe"),true)!=null,"partial enumeration accepted");
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,0,NvidiaApps(),true)!=null,"empty enumeration accepted");
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,129,NvidiaApps("cs2.exe"),true)!=null,"unbounded count accepted");
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,1,null,true)!=null,"unknown associations accepted");
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,2,NvidiaApps("cs2.exe","CS2.EXE"),true)!=null,"duplicate aliases accepted");
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,1,NvidiaApps("csgos2.exe"),true)!=null,"missing primary executable accepted");
+                });
+                Test("NVIDIA multi-app profiles require predefined game associations",delegate{
+                    string path=@"D:\Games\CS2\cs2.exe";var apps=NvidiaApps("cs2.exe","csgos2.exe");
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,2,apps,false)!=null,"custom shared profile accepted");apps[1].Predefined=false;
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,2,apps,true)!=null,"custom alternate association accepted");
+                });
+                Test("NVIDIA rejects conditional launch and command-line associations",delegate{
+                    foreach(int condition in new[]{0,1,2,3})
+                    {
+                        var apps=NvidiaApps("cs2.exe","csgos2.exe");if(condition==0)apps[1].Flags=2;if(condition==1)apps[1].Launcher="unknown.exe";
+                        if(condition==2)apps[1].FileInFolder="marker.dll";if(condition==3)apps[1].CommandLine="cs2.exe -unknown";
+                        Check(NvidiaGameSettings.AssociationBlockReason("CS2",@"D:\Games\CS2\cs2.exe",2,apps,true)!=null,"unverified condition accepted");
+                    }
+                });
+                Test("NVIDIA permits selected install paths but not another installation",delegate{
+                    string path=@"D:\Games\CS2\cs2.exe";
+                    Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,2,NvidiaApps(path,@"D:\Games\CS2\csgos2.exe"),true)==null,"selected installation blocked");
+                    foreach(string other in new[]{@"E:\Other\cs2.exe",@"E:\Other\csgos2.exe",@"subdir\cs2.exe","D:cs2.exe"})
+                        Check(NvidiaGameSettings.AssociationBlockReason("CS2",path,2,NvidiaApps("cs2.exe",other),true)!=null,"unverified install accepted: "+other);
+                });
+                Test("NVIDIA global and single-app backup identities remain compatible",delegate{
+                    string path=@"D:\Games\CS2\cs2.exe";
+                    Check(NvidiaGameSettings.AssociationIdentity("CS2",path,"Counter-strike 2",1,NvidiaApps("cs2.exe"))==WindowsManagerBackend.Hash("CS2|"+path.ToLowerInvariant()+"|Counter-strike 2|1"),"existing game backup identity changed");
+                    Check(NvidiaGameSettings.AssociationIdentity("GLOBAL",null,"Base Profile",20,NvidiaApps())==WindowsManagerBackend.Hash("GLOBAL|global|Base Profile|20"),"existing global backup identity changed");
+                    Check(NvidiaGameSettings.AssociationBlockReason("GLOBAL",null,20,null,false)==null,"explicit global settings were incorrectly blocked");
+                });
+                Test("NVIDIA multi-app identity tracks membership not enumeration order",delegate{
+                    string path=@"D:\Games\CS2\cs2.exe";var original=NvidiaApps("cs2.exe","csgos2.exe");
+                    string id=NvidiaGameSettings.AssociationIdentity("CS2",path,"Counter-strike 2",2,original);
+                    Check(id==NvidiaGameSettings.AssociationIdentity("CS2",path,"Counter-strike 2",2,NvidiaApps("CSGOS2.EXE","CS2.EXE")),"enumeration order or case changed identity");
+                    Check(id!=NvidiaGameSettings.AssociationIdentity("CS2",path,"Counter-strike 2",2,NvidiaApps("cs2.exe","foreign.exe")),"replacement association not detected");
+                    original[1].Flags=2;Check(id!=NvidiaGameSettings.AssociationIdentity("CS2",path,"Counter-strike 2",2,original),"changed launch conditions not detected");
+                });
+                if(args.Contains("--nvidia-cs2-read"))Test("actual NVIDIA CS2 preset has writable verified game associations (read only)",delegate{
+                    int index=Array.IndexOf(args,"--nvidia-cs2-read");if(index+1>=args.Length)throw new ArgumentException("Missing CS2 path");
+                    using(var nvidia=new NvidiaGameSettings("CS2",args[index+1]))
+                    {
+                        var settings=nvidia.Scan();Check(settings.Count==8,"incomplete NVIDIA catalog");
+                        foreach(var setting in settings){Check(setting.supported,"NVIDIA CS2 read remains blocked: "+setting.blocked);Check(!string.IsNullOrEmpty(setting.Raw)&&!string.IsNullOrEmpty(setting.Identity),"missing restore data");}
+                        Console.WriteLine("NVIDIA CS2 verified: "+settings[0].detail+"; writable="+settings.Count(x=>x.supported));
+                    }
+                });
+                Test("manager rejects silently ignored writes and restores",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){var api=new FakeManager {IgnoreWrites=true};var manager=new OptimizationManagers(api,file);Throws(delegate{manager.Change("tasks","sample","false",false);});Check(api.Value=="true"&&!manager.HasBackup("tasks","sample"),"ignored apply reported success or left wrong backup");api.IgnoreWrites=false;manager.Change("tasks","sample","false",false);api.IgnoreWrites=true;Throws(delegate{manager.Change("tasks","sample",null,true);});Check(manager.HasBackup("tasks","sample")&&api.Value=="false","failed restore discarded backup");});
+                });
+                Test("manager never writes or claims a backup when backup persistence fails",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){Directory.CreateDirectory(file+".tmp");var api=new FakeManager();var manager=new OptimizationManagers(api,file);BackupFailure(delegate{manager.Change("tasks","sample","false",false);});Check(api.Writes==0&&!manager.HasBackup("tasks","sample"),"unpersisted backup accepted");});
+                });
+                Test("manager retains original when backup cleanup fails after restore",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){var api=new FakeManager();var manager=new OptimizationManagers(api,file);manager.Change("tasks","sample","false",false);Directory.CreateDirectory(file+".tmp");BackupFailure(delegate{manager.Change("tasks","sample",null,true);});Check(manager.HasBackup("tasks","sample")&&api.Value=="true","original backup lost on cleanup failure");Directory.Delete(file+".tmp");manager.Change("tasks","sample",null,true);Check(!manager.HasBackup("tasks","sample"),"backup not cleaned after successful retry");});
+                });
+                Test("manager does not report restore success when target identity changed",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){var api=new FakeManager();var manager=new OptimizationManagers(api,file);manager.Change("tasks","sample","false",false);api.BeforeWrite=delegate{api.Identity="replacement";};Throws(delegate{manager.Change("tasks","sample",null,true);});Check(manager.HasBackup("tasks","sample"),"backup cleared despite target identity change");});
+                });
+                Test("APPX removal success requires the package to be absent on readback",delegate{
+                    AppxManagement.VerifyRemoved("Sample_1",new AppxItem[0]);Throws(delegate{AppxManagement.VerifyRemoved("Sample_1",new[]{new AppxItem {package="sample_1"}});});Throws(delegate{AppxManagement.VerifyRemoved("Sample_1",null);});
                 });
                 Test("manager journal persists before write and restores after reopen",delegate{
                     WithTuning(delegate(string file,FakeTuning ignored){var api=new FakeManager();var manager=new OptimizationManagers(api,file);api.BeforeWrite=delegate{Check(File.Exists(file)&&manager.HasBackup("tasks","sample"),"native write preceded durable original backup");};manager.Change("tasks","sample","false",false);api.BeforeWrite=null;Check(api.Value=="false","manager not applied");new OptimizationManagers(api,file).Change("tasks","sample",null,true);Check(api.Value=="true","manager original not restored");});
@@ -607,6 +703,10 @@ namespace NexaArena
             }
             public void Dispose(){Page.Dispose();}
         }
+        private static List<NvidiaGameSettings.ApplicationAssociation> NvidiaApps(params string[] names)
+        {return names.Select(x=>new NvidiaGameSettings.ApplicationAssociation {Name=x,Predefined=true,Launcher=string.Empty,FileInFolder=string.Empty,CommandLine=string.Empty}).ToList();}
+        private static bool TuningSucceeded(object result)
+        {return ((System.Collections.IEnumerable)result.GetType().GetProperty("outcomes").GetValue(result,null)).Cast<object>().All(x=>(bool)x.GetType().GetProperty("ok").GetValue(x,null));}
         private static void WithTuning(Action<string,FakeTuning> test)
         {
             string folder=Path.Combine(Path.GetTempPath(),"nexa-tuning-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
@@ -615,10 +715,10 @@ namespace NexaArena
         private sealed class FakeTuning:ITuningBackend
         {
             public readonly Dictionary<string,string> Values=new Dictionary<string,string>();
-            public bool Fail,NativeDesired;public int Writes;
+            public bool Fail,NativeDesired,IgnoreWrites;public int Writes;
             public string Read(string id,string path){string value;return Values.TryGetValue(id,out value)?value:"missing";}
             public string Desired(string id,string original){return NativeDesired?new WindowsTuningBackend().Desired(id,original):id=="game-mode"?"d:1":"d:0";}
-            public void Write(string id,string path,string value){Writes++;Values[id]=value;if(Fail){Fail=false;throw new InvalidOperationException("injected write failure");}}
+            public void Write(string id,string path,string value){Writes++;if(IgnoreWrites)return;Values[id]=value;if(Fail){Fail=false;throw new InvalidOperationException("injected write failure");}}
         }
         private sealed class ServiceTuning:ITuningBackend
         {
@@ -632,11 +732,11 @@ namespace NexaArena
         }
         private sealed class FakeManager:IManagerBackend
         {
-            public string Value="true",Identity="original";public bool Fail;public int Writes;public Action BeforeWrite;
+            public string Value="true",Identity="original";public bool Fail,IgnoreWrites;public int Writes;public Action BeforeWrite;
             public List<ManagerItem> Scan(string module){return new List<ManagerItem>{Read(module,"sample")};}
             public ManagerItem Read(string module,string id){if(module!="tasks"||id!="sample")throw new ArgumentException("unknown manager target");return new ManagerItem {id=id,title=id,Raw=Value,Identity=Identity,supported=true};}
             public string Desired(string module,string id,string choice){Read(module,id);if(choice!="false"&&choice!="true")throw new ArgumentException("unknown choice");return choice;}
-            public void Write(string module,string id,string value){Read(module,id);if(BeforeWrite!=null)BeforeWrite();Writes++;Value=value;if(Fail){Fail=false;throw new InvalidOperationException("injected partial manager failure");}}
+            public void Write(string module,string id,string value){Read(module,id);if(BeforeWrite!=null)BeforeWrite();Writes++;if(IgnoreWrites)return;Value=value;if(Fail){Fail=false;throw new InvalidOperationException("injected partial manager failure");}}
         }
         private sealed class FakeKeys:IHotkeyBackend
         {

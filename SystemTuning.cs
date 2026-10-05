@@ -112,6 +112,10 @@ namespace NexaArena
             else backups=new TuningBackups();
             if(backups==null||backups.Items==null)throw new InvalidOperationException("优化备份无法读取，请保留文件并检查。");
         }
+        private void AddBackup(TuningBackup saved)
+        {backups.Items.Add(saved);try{Save();}catch{backups.Items.Remove(saved);throw;}}
+        private void RemoveBackup(TuningBackup saved)
+        {int index=backups.Items.IndexOf(saved);backups.Items.Remove(saved);try{Save();}catch{if(index>=0)backups.Items.Insert(index,saved);throw;}}
         private static TuningDefinition Definition(string id)
         {var d=Definitions.FirstOrDefault(x=>x.Id==id);if(d==null)throw new ArgumentException("未知优化项："+id);return d;}
         private static string Target(TuningDefinition d,string path)
@@ -164,10 +168,11 @@ namespace NexaArena
                     if(restore)
                     {
                         if(saved==null){outcomes.Add(new {id=d.Id,ok=true,message="没有需要还原的备份"});continue;}
+                        if(current==saved.Original){RemoveBackup(saved);outcomes.Add(new {id=d.Id,ok=true,message="现值已是原值，已清理对应备份"});continue;}
                         if(current!=saved.Written)throw new InvalidOperationException("设置已被其他程序修改，已保留备份；请确认当前值。");
                         backend.Write(d.Id,target,saved.Original);
                         if(backend.Read(d.Id,target)!=saved.Original)throw new InvalidOperationException("原值恢复校验未通过，备份保留。");
-                        backups.Items.Remove(saved);Save();
+                        RemoveBackup(saved);
                         outcomes.Add(new {id=d.Id,ok=true,message="已还原原值"});
                     }
                     else
@@ -180,7 +185,7 @@ namespace NexaArena
                         string desired=backend.Desired(d.Id,current);
                         if(current==desired){outcomes.Add(new {id=d.Id,ok=true,message="现值已符合，无需修改"});continue;}
                         saved=new TuningBackup {Id=d.Id,Path=target,Original=current,Written=desired};
-                        backups.Items.Add(saved);Save();
+                        AddBackup(saved);
                         try
                         {
                             backend.Write(d.Id,target,desired);
@@ -188,7 +193,7 @@ namespace NexaArena
                         }
                         catch
                         {
-                            try {backend.Write(d.Id,target,current);if(backend.Read(d.Id,target)==current){backups.Items.Remove(saved);Save();}}catch { }
+                            try {backend.Write(d.Id,target,current);if(backend.Read(d.Id,target)==current)RemoveBackup(saved);}catch { }
                             throw;
                         }
                         outcomes.Add(new {id=d.Id,ok=true,message="已应用并保存原值"});
