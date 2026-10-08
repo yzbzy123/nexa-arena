@@ -16,7 +16,7 @@ if(-not(Test-Path -LiteralPath (Join-Path $web 'dist\index.html'))){throw 'Build
 New-Item -ItemType Directory -Path $output -Force|Out-Null
 $source=@('NexaArena.cs','ModernUI.cs','ArenaDesign.cs','ValorantLocator.cs','TrueStretchService.cs',
     'RestoreService.cs','ArenaModules.cs','Cs2Crosshair.cs','ToolboxCore.cs','SensitivityProjection.cs','DesktopIntegration.cs',
-    'DesktopIconLayout.cs','GameAudio.cs','GameOptimizer.cs','GameProcessProfiles.cs','SystemTuning.cs','MemoryCleaner.cs','OptimizationManagers.cs','NvidiaGameSettings.cs','DeviceTuning.cs','AppxManagement.cs','ReadinessReport.cs','SystemRepairJobs.cs','ToolboxPages.cs','WebMainForm.cs') |
+    'DesktopIconLayout.cs','GameAudio.cs','GameOptimizer.cs','GamePrograms.cs','GameProcessProfiles.cs','SystemTuning.cs','MemoryCleaner.cs','OptimizationManagers.cs','NvidiaGameSettings.cs','DeviceTuning.cs','AppxManagement.cs','ReadinessReport.cs','SystemRepairJobs.cs','ToolboxPages.cs','WebMainForm.cs') |
     ForEach-Object {Join-Path $projectRoot $_}
 $previewSource=Join-Path $projectRoot 'tools\WebPreview.cs'
 $manifest=Join-Path $projectRoot $(if($Preview){'tools\ui-probe.manifest'}else{'app.manifest'})

@@ -38,6 +38,7 @@ export type Settings = {
   hotkeys: Hotkey[]
 }
 export type Bootstrap = {
+  optimizationGame?: Game
   display: DisplayState
   modes: Mode[]
   cs2: Crosshair[]

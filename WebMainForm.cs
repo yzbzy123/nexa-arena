@@ -23,7 +23,7 @@ namespace NexaArena
         private OptimizationManagers managers;
         private GameProcessProfiles processProfiles;
         private readonly SystemRepairJobs repairJobs=new SystemRepairJobs();
-        private readonly Dictionary<string,string> optimizationPaths=new Dictionary<string,string>();
+        private readonly GamePrograms gamePrograms=new GamePrograms();
         private readonly string screenshotDirectory;
 
         public WebMainForm(string screenshotDirectory=null)
@@ -135,6 +135,7 @@ namespace NexaArena
                                         await browser.ExecuteScriptAsync("document.querySelector('.page-scroll').scrollTop=0");
                                         await ClickPreviewTab(1);await System.Threading.Tasks.Task.Delay(450);await CaptureScreenshot("memory.png");
                                         await ClickPreviewTab(2);await System.Threading.Tasks.Task.Delay(250);await CaptureScreenshot("system-tools.png");
+                                        await CheckSystemToolsLayout();
                                         foreach(string moduleLabel in new[]{"登录启动项","计划任务","服务管理","网卡 DNS","网卡高级属性","NVIDIA 全局设置","设备音频控制","MSI 配置（实验性）","中断路由（实验性）","游戏 IFEO 重定向","APPX / MSIX 应用","负载与就绪检查","Windows 检查与修复"})
                                         {
                                             await ChoosePreviewManager(moduleLabel);
@@ -189,6 +190,41 @@ namespace NexaArena
                         "Nexa Arena",MessageBoxButtons.OK,MessageBoxIcon.Warning);
                 }
             };
+        }
+
+        private async System.Threading.Tasks.Task CheckSystemToolsLayout()
+        {
+            Size original=ClientSize;
+            await ChoosePreviewManager("NVIDIA 全局设置");await System.Threading.Tasks.Task.Delay(700);
+            string aligned=await browser.ExecuteScriptAsync("{const a=document.querySelector('.management-layout .manager-list').getBoundingClientRect(),b=document.querySelector('.manager-inspector').getBoundingClientRect();Math.abs(a.top-b.top)<2}");
+            if(aligned!="true")throw new InvalidOperationException("Manager list and inspector top edges are not aligned.");
+            string closed=await browser.ExecuteScriptAsync("document.querySelector('[data-system-shortcuts] [data-slot=collapsible-trigger]').getAttribute('aria-expanded')==='false'");
+            if(closed!="true")throw new InvalidOperationException("Windows shortcuts must start collapsed.");
+            string separated=await browser.ExecuteScriptAsync("{const w=document.querySelector('[data-management-module]').getBoundingClientRect(),s=document.querySelector('[data-system-shortcuts]').getBoundingClientRect();s.top-w.bottom>=23}");
+            if(separated!="true")throw new InvalidOperationException("System shortcuts are not separated from the manager workspace.");
+            await browser.ExecuteScriptAsync("document.querySelector('.page-scroll').scrollTop=document.querySelector('.page-scroll').scrollHeight");
+            await System.Threading.Tasks.Task.Delay(100);await CaptureScreenshot("manager-shortcuts-closed.png");
+            await browser.ExecuteScriptAsync("document.querySelector('[data-system-shortcuts] [data-slot=collapsible-trigger]').focus()");
+            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setFocusEmulationEnabled",json.Serialize(new {enabled=true}));
+            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent",json.Serialize(new {type="keyDown",key="Enter",code="Enter",text="\r",unmodifiedText="\r",windowsVirtualKeyCode=13}));
+            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent",json.Serialize(new {type="keyUp",key="Enter",code="Enter",windowsVirtualKeyCode=13}));
+            await System.Threading.Tasks.Task.Delay(150);
+            string expanded=await browser.ExecuteScriptAsync("{const s=document.querySelector('[data-system-shortcuts]'),b=s.querySelectorAll('[data-slot=collapsible-content] button');s.querySelector('[data-slot=collapsible-trigger]').getAttribute('aria-expanded')==='true'&&b.length===5&&Array.from(b).every(x=>x.disabled)}");
+            if(expanded!="true")
+            {
+                string evidence=await browser.ExecuteScriptAsync("JSON.stringify({focus:document.hasFocus(),active:document.activeElement?.getAttribute('data-slot'),expanded:document.querySelector('[data-system-shortcuts] [data-slot=collapsible-trigger]')?.getAttribute('aria-expanded'),buttons:Array.from(document.querySelectorAll('[data-system-shortcuts] [data-slot=collapsible-content] button')).map(x=>({text:x.textContent,disabled:x.disabled}))})");
+                throw new InvalidOperationException("Keyboard shortcut expansion failed or original actions were lost/enabled in preview: "+evidence);
+            }
+            await browser.ExecuteScriptAsync("document.querySelector('.page-scroll').scrollTop=document.querySelector('.page-scroll').scrollHeight");
+            await CaptureScreenshot("manager-shortcuts-open.png");
+            ClientSize=new Size(800,650);await System.Threading.Tasks.Task.Delay(200);
+            await browser.ExecuteScriptAsync("document.querySelector('.page-scroll').scrollTop=document.querySelector('.page-scroll').scrollHeight");
+            string fits=await browser.ExecuteScriptAsync("Array.from(document.querySelectorAll('.page-scroll,.management-workspace,.system-shortcuts')).every(x=>x.scrollWidth<=x.clientWidth+2)");
+            if(fits!="true")throw new InvalidOperationException("System manager shortcuts overflow in a narrow window.");
+            await CaptureScreenshot("manager-shortcuts-narrow.png");
+            await browser.ExecuteScriptAsync("document.querySelector('[data-system-shortcuts] [data-slot=collapsible-trigger]').click()");
+            ClientSize=original;await System.Threading.Tasks.Task.Delay(200);
+            await browser.ExecuteScriptAsync("document.querySelector('.page-scroll').scrollTop=0");
         }
 
         private async System.Threading.Tasks.Task CaptureScreenshot(string file)
@@ -323,7 +359,9 @@ namespace NexaArena
                 case "audio.volume": GameAudio.SetEndpointVolume(String(data,"id",null),Int(data,"volume",0),Bool(data,"muted",false));return true;
                 case "audio.session": return SetAudioSession(data);
                 case "audio.micToggle": return GameAudio.ToggleDefaultMicrophone();
-                case "optimizer.inspect": return OptimizationInspect(String(data,"game","CS2"));
+                case "optimizer.inspect": return OptimizationInspect(String(data,"game","CS2"),Bool(data,"refresh",false));
+                case "optimizer.select": gamePrograms.SelectGame(String(data,"game","CS2"));return new {saved=true};
+                case "optimizer.usePath": gamePrograms.SelectPath(String(data,"game","CS2"),String(data,"path",null));return OptimizationInspect(String(data,"game","CS2"));
                 case "optimizer.pick": return PickOptimizationGame(String(data,"game","CS2"));
                 case "optimizer.apply": return Tuning().Change(StringArray(data,"ids"),OptimizationPath(String(data,"game","CS2")),Bool(data,"restore",false));
                 case "optimizer.profileExport":return ExportOptimizationProfile(String(data,"game","CS2"),StringArray(data,"ids"));
@@ -339,6 +377,7 @@ namespace NexaArena
                 case "optimizer.power": OpenSettings("ms-settings:powersleep");return true;
                 case "optimizer.settings": return OptimizationSettings(String(data,"page","graphics"));
                 case "memory.status":return memoryCleaner.Status();
+                case "memory.save":return memoryCleaner.SaveInputs(Int(data,"listMb",1024),Int(data,"freeMb",1024),Bool(data,"onlyGame",true),(double)Decimal(data,"milliseconds",1));
                 case "memory.configure":return memoryCleaner.Configure(Bool(data,"enabled",false),Int(data,"listMb",1024),Int(data,"freeMb",1024),Bool(data,"onlyGame",true));
                 case "memory.purge":return memoryCleaner.Purge();
                 case "memory.timer":return memoryCleaner.SetTimer(Bool(data,"enabled",false),(double)Decimal(data,"milliseconds",1));
@@ -359,7 +398,7 @@ namespace NexaArena
                 sensitivity=new {settings=SettingsSnapshot(),resolutions=SensitivityProjection.Presets.Select(x=>new {key=x.Key,label=x.ToString()}).ToArray(),
                     methods=SensitivityFormulas.Ids.Select((id,index)=>new {id,label=SensitivityFormulas.Names[index]}).ToArray()},
                 buyItems=Cs2Commands.ItemIds.Select((id,index)=>new {id,name=Cs2Commands.ItemNames[index]}).ToArray(),
-                preview=Program.UiPreview};
+                optimizationGame=gamePrograms.LastGame,preview=Program.UiPreview};
         }
 
         private object SettingsSnapshot()
@@ -479,15 +518,12 @@ namespace NexaArena
         }
         private string OptimizationPath(string game)
         {
-            GameOptimizer.ExecutableName(game);
-            string path=GameOptimizer.RunningPath(game);
-            if(string.IsNullOrEmpty(path))optimizationPaths.TryGetValue(game,out path);
-            return path;
+            return gamePrograms.Resolve(game).Path;
         }
-        private object OptimizationInspect(string game)
+        private object OptimizationInspect(string game,bool refresh=false)
         {
-            string path=OptimizationPath(game);
-            return new {process=GameOptimizer.Inspect(game),path,options=Tuning().Catalog(path),memory=memoryCleaner.Status()};
+            var location=gamePrograms.Resolve(game,refresh);string path=location.Path;
+            return new {process=GameOptimizer.Inspect(game),path,pathSource=location.Source,pathMessage=gamePrograms.Warning??location.Message,candidates=location.Candidates,options=Tuning().Catalog(path),memory=memoryCleaner.Status()};
         }
         private object PickOptimizationGame(string game)
         {
@@ -496,7 +532,7 @@ namespace NexaArena
             {
                 if(dialog.ShowDialog(this)!=DialogResult.OK)return OptimizationInspect(game);
                 if(!GameOptimizer.IsExecutable(game,dialog.FileName))throw new InvalidOperationException("请选择 "+expected+"。");
-                optimizationPaths[game]=dialog.FileName;
+                gamePrograms.SelectPath(game,dialog.FileName);
             }
             return OptimizationInspect(game);
         }
@@ -509,6 +545,9 @@ namespace NexaArena
                 case "startup":OpenSettings("ms-settings:startupapps");break;
                 case "network":OpenSettings("ms-settings:network-status");break;
                 case "services":Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"services.msc")) {UseShellExecute=true});break;
+                case "nvidia":
+                    string panel=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),@"NVIDIA Corporation\Control Panel Client\nvcplui.exe");
+                    Process.Start(new ProcessStartInfo(File.Exists(panel)?panel:@"shell:AppsFolder\NVIDIACorp.NVIDIAControlPanel_56jybvy8sckqj!NVIDIACorp.NVIDIAControlPanel") {UseShellExecute=true});break;
                 default:throw new ArgumentException("未知系统设置页。");
             }
             return true;

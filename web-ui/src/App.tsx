@@ -4,7 +4,7 @@ import { AudioLines, BookOpen, Crosshair, Keyboard, Monitor, RotateCcw, Settings
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { demo, type Bootstrap, type DisplayState } from "@/lib/types"
+import { demo, type Bootstrap, type DisplayState, type Game } from "@/lib/types"
 import { invoke, isDesktop, onNativeEvent } from "@/lib/bridge"
 import { ValorantPage } from "@/components/pages/valorant"
 import { Cs2Page } from "@/components/pages/cs2"
@@ -29,6 +29,7 @@ export function App() {
   const [boot, setBoot] = useState<Bootstrap | null>(isDesktop ? null : demo)
   const [display, setDisplay] = useState<DisplayState>(demo.display)
   const [active, setActive] = useState<PageId>("valorant")
+  const [optimizationGame,setOptimizationGame]=useState<Game>(demo.optimizationGame??"CS2")
   const [busy, setBusy] = useState<string | null>(null)
   const [startupError, setStartupError] = useState<string | null>(null)
 
@@ -42,6 +43,7 @@ export function App() {
     if (!isDesktop) return
     invoke<Bootstrap>("bootstrap").then((value) => {
       setBoot(value)
+      setOptimizationGame(value.optimizationGame??"CS2")
       setDisplay(value.display)
     }).catch((error: Error) => setStartupError(error.message))
     const timer = window.setInterval(refreshDisplay, 2000)
@@ -120,7 +122,7 @@ export function App() {
             {active === "cs2" && <Cs2Page boot={boot} display={display} busy={busy} run={run} copy={copy} />}
             {active === "sensitivity" && <SensitivityPage boot={boot} busy={busy} run={run} copy={copy} />}
             {active === "audio" && <AudioPage busy={busy} preview={boot.preview} run={run} />}
-            {active === "optimizer" && <Suspense fallback={<p role="status">正在载入优化工具…</p>}><OptimizerPage busy={busy} preview={boot.preview} run={run} /></Suspense>}
+            {active === "optimizer" && <Suspense fallback={<p role="status">正在载入优化工具…</p>}><OptimizerPage busy={busy} preview={boot.preview} game={optimizationGame} onGameChange={setOptimizationGame} run={run} /></Suspense>}
             {active === "settings" && <SettingsPage boot={boot} busy={busy} run={run} />}
             {active === "guide" && <GuidePage />}
           </div>

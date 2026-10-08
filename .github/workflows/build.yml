@@ -33,6 +33,8 @@ jobs:
       - name: Test restore policy
         shell: pwsh
         run: ./tools/Test-Restore.ps1
+      - name: Test preference save queue
+        run: node --test tools/Test-PreferenceSaveQueue.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: nexa-arena-windows-x64

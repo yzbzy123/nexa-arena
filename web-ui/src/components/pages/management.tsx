@@ -22,7 +22,7 @@ const modules=[{value:"startup",label:"登录启动项"},{value:"tasks",label:"�
 const descriptions:Record<string,string>={startup:"管理当前用户及所有用户的 32/64 位 Run 登录启动项。移出前保存原始命令和值类型；不结束当前程序，不处理安装器 RunOnce。",tasks:"只改变将来的任务触发，不运行、删除或强停任务。Windows 关键任务、安全与反作弊相关任务受保护；仅修改你认识的可选任务。",services:"显示服务真实启动和运行状态。只修改明确允许的可选服务；音频、网络、安全、更新及未知依赖只读，不强停当前服务。",network:"仅调整所选网卡的 IPv4 DNS，不改 IP、网关、IPv6 或 Wi-Fi。公共 DNS 运营方会处理解析请求，不保证降低游戏延迟。","network-advanced":"使用驱动实际提供的合法枚举值；中断节流、节能、卸载等可能改善或降低表现。请求不自动重启适配器，更改后需手动重连或重启核对。",power:"电源会话原值独立保存；仅在现值仍匹配本次写入值时还原。外部手动变更不会被覆盖。",devices:"仅控制已识别的 NVIDIA 音频控制器/子设备，不禁用 GPU、监视器、输入或存储设备。更改会影响 HDMI/DP 音频和默认音频路由。","device-msi":"实验性：仅管理驱动已有的 PCI 网卡/显卡 MSI 参数，不创建未知中断键。配置值不代表运行时验证；重启后可能发生设备或显示异常。","interrupt-affinity":"实验性：仅管理已有策略键的 PCI 显卡、网卡或 USB 控制器；USB 控制器设置影响所有关联外设，不是只改鼠标。微软建议优先保留默认策略。",ifeo:"检查 CS2/VALORANT 的 IFEO 调试器重定向，仅移除已有 Debugger 值并保存原值。依赖调试器的环境勿修改，不设置任意调试器或注入游戏。"}
 
 export function ManagementWorkbench({busy,preview,run}:{busy:string|null;preview:boolean;run:ActionRunner}) {
-  const [module,setModule]=useState("startup")
+  const [module,setModule]=useState(()=>{try{const value=localStorage.getItem("nexa.management.module");return modules.some(x=>x.value===value)?value!:"startup"}catch{return "startup"}})
   const [items,setItems]=useState<Item[]>([])
   const [query,setQuery]=useState("")
   const [error,setError]=useState<string|null>(null)
@@ -48,14 +48,17 @@ export function ManagementWorkbench({busy,preview,run}:{busy:string|null;preview
   const experimental=module==="device-msi"||module==="interrupt-affinity"
   async function change(restore:boolean){setConfirmation(null);if(!selected)return;const result=await run<{ok:boolean;message:string}>("manager.change",{module,target:selected.id,choice,restore,riskAcknowledged});if(result?.ok){toast.success(result.message);await refresh()}}
   return <div className="stack" data-management-module={module}>
-    <FieldGroup className="flex-row flex-wrap items-end gap-3"><Field className="min-w-48 flex-1"><Choice label="管理模块" value={module} onChange={setModule} options={modules}/></Field>
+    <FieldGroup className="flex-row flex-wrap items-end gap-3"><Field className="min-w-48 flex-1"><Choice label="管理模块" value={module} onChange={value=>{setModule(value);try{localStorage.setItem("nexa.management.module",value)}catch{}}} options={modules}/></Field>
       {module!=="apps"&&module!=="readiness"&&module!=="repair"&&<><Field className="min-w-48 flex-1"><FieldLabel htmlFor="manager-search">搜索项目</FieldLabel><Input id="manager-search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="输入名称、任务路径或网卡参数…" /></Field>
       <Button variant="outline" disabled={!isDesktop||loading||!!busy} onClick={refresh}><RefreshCcw data-icon="inline-start"/>刷新列表</Button></>}</FieldGroup>
     {module==="apps"?<AppxPanel busy={busy} preview={preview} run={run}/>:module==="readiness"?<ReadinessPanel busy={busy} run={run}/>:module==="repair"?<RepairPanel busy={busy} preview={preview} run={run}/>:<>
     <Alert><AlertTitle>只修改明确选中的项目</AlertTitle><AlertDescription>{module.startsWith("nvidia")?"通过 NVIDIA 官方 NVAPI 读写驱动配置。全局项影响全部程序和电池功耗；游戏项需先选择主程序，仅允许已确认属于该游戏的关联程序，未知或跨游戏关联只读。不改变分辨率或禁用设备。":descriptions[module]}</AlertDescription></Alert>
+    {module.startsWith("nvidia")&&<div className="flex flex-wrap items-center gap-3"><Button variant="outline" disabled={locked} onClick={()=>run("optimizer.settings",{page:"nvidia"})}>打开 NVIDIA 控制面板</Button><span className="section-caption">低延迟等尚未核实参数映射的选项请在控制面板调整；工具不套用未知注册表值。</span></div>}
     {error&&<Alert variant="destructive"><AlertTitle>列表读取失败</AlertTitle><AlertDescription>{error} 请刷新或切换其他模块。</AlertDescription></Alert>}
+    <div className="management-workspace">
+      <p className="section-caption" role="status">{loading?"正在读取…":`显示 ${shown.length} / ${items.length} 项 · 原值备份 ${items.filter(x=>x.applied).length} 项`}</p>
     <div className="management-layout">
-      <div><p className="section-caption mb-3" role="status">{loading?"正在读取…":`显示 ${shown.length} / ${items.length} 项 · 原值备份 ${items.filter(x=>x.applied).length} 项`}</p>
+      <div>
         <div className="manager-list">{shown.map(item=><button type="button" key={item.id} className="manager-list-row" aria-pressed={selected?.id===item.id} onClick={()=>pick(item)}><span><strong>{item.title}</strong><span className="list-row-meta">{item.detail}</span></span><Badge variant={item.applied?"default":"outline"}>{item.applied?"已保存原值":item.supported?"可管理":"只读"}</Badge></button>)}
           {!loading&&shown.length===0&&<p className="p-4 text-muted-foreground">{items.length?"没有匹配的项目。":"未发现项目，或该模块在此系统不可用。"}</p>}</div>
       </div>
@@ -64,6 +67,7 @@ export function ManagementWorkbench({busy,preview,run}:{busy:string|null;preview
           {selected.supported&&selected.choices.length>0&&<Choice label="目标操作 / 值" value={choice} onChange={setChoice} options={selected.choices}/>}
           <div className="flex flex-wrap gap-2"><Button disabled={locked||loading||!selected.supported||!choice} onClick={()=>{setRiskAcknowledged(false);setConfirmation("apply")}}><Check data-icon="inline-start"/>检查并应用</Button><Button variant="outline" disabled={locked||loading||!selected.applied||!selected.supported} onClick={()=>{setRiskAcknowledged(false);setConfirmation("restore")}}><RotateCcw data-icon="inline-start"/>还原原值</Button></div>
           <p className="section-caption">原值备份受当前 Windows 用户保护。若现值或目标身份被外部修改，会保留备份并拒绝覆盖。</p></>}</CardContent></Card>
+    </div>
     </div>
     {(module==="network"||module==="network-advanced")&&<Card className="panel-card"><CardHeader><CardTitle>网络往返延迟检查</CardTitle><CardDescription>发送 8 次 ICMP 请求，显示丢包和往返抖动；不是游戏 UDP 测速，不自动切换 DNS。</CardDescription></CardHeader><CardContent className="flex flex-col gap-4">
       <FieldGroup className="flex-row flex-wrap items-end gap-3"><Field className="min-w-48 flex-1"><FieldLabel htmlFor="network-test-host">目标 IP 或主机名</FieldLabel><Input id="network-test-host" value={host} onChange={event=>setHost(event.target.value)}/></Field><Button disabled={locked||!host.trim()} onClick={async()=>{const value=await run<typeof test>("network.test",{host:host.trim()});if(value)setTest(value)}}>开始检查</Button></FieldGroup>

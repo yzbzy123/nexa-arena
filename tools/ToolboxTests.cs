@@ -530,6 +530,72 @@ namespace NexaArena
                     Check(!MemoryCleaner.ShouldClean(2048,512,1024,1024,true,false,false),"purged without game");
                     Check(!MemoryCleaner.ShouldClean(2048,512,1024,1024,true,true,true),"cooldown ignored");
                 });
+                Test("game program selection and per-game paths persist after reopening",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){string cs=Path.Combine(Path.GetDirectoryName(file),"cs2.exe"),val=Path.Combine(Path.GetDirectoryName(file),"VALORANT-Win64-Shipping.exe");File.WriteAllText(cs,"");File.WriteAllText(val,"");var paths=new GamePrograms(file,g=>null,g=>new string[0]);paths.SelectPath("CS2",cs);paths.SelectPath("VALORANT",val);var reopened=new GamePrograms(file,g=>null,g=>new string[0]);Check(reopened.LastGame=="VALORANT"&&reopened.Resolve("CS2").Path==cs&&reopened.Resolve("VALORANT").Path==val,"game or paths were lost");});
+                });
+                Test("game selection stores no optimization or automatic monitoring commands",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){var paths=new GamePrograms(file,g=>null,g=>new string[0]);paths.SelectGame("VALORANT");Check(new GamePrograms(file,g=>null,g=>new string[0]).LastGame=="VALORANT","last game not saved");Check(!File.ReadAllText(file).Contains("HighPower"),"game selection stored unrelated changes");Throws(delegate{paths.SelectGame("unknown");});});
+                });
+                Test("game program discovery rejects launchers and invalid cache paths",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){string launcher=Path.Combine(Path.GetDirectoryName(file),"RiotClientServices.exe");File.WriteAllText(launcher,"");var paths=new GamePrograms(file,g=>null,g=>new[]{launcher});Throws(delegate{paths.SelectPath("VALORANT",launcher);});Check(paths.Resolve("VALORANT").Path==null&&!File.Exists(file),"launcher selected or readonly discovery wrote preferences");Check(GamePrograms.ValidPath("CS2","cs2.exe")==null,"relative program path accepted");});
+                });
+                Test("game program discovery uses unique installs and never guesses among multiple installs",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){string root=Path.GetDirectoryName(file),one=Path.Combine(root,"cs2.exe"),folder=Path.Combine(root,"second");Directory.CreateDirectory(folder);string two=Path.Combine(folder,"cs2.exe");File.WriteAllText(one,"");File.WriteAllText(two,"");var unique=new GamePrograms(file,g=>null,g=>new[]{one,one});Check(unique.Resolve("CS2").Path==one,"unique install not resolved");var multiple=new GamePrograms(file,g=>null,g=>new[]{one,two});var result=multiple.Resolve("CS2");Check(result.Path==null&&result.Candidates.Length==2&&!string.IsNullOrEmpty(result.Message),"multiple installs were guessed");multiple.SelectPath("CS2",two);Check(multiple.Resolve("CS2").Path==two,"explicit installation not remembered");});
+                });
+                Test("game program cache is revalidated and missing paths are rediscovered",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){string first=Path.Combine(Path.GetDirectoryName(file),"cs2.exe"),folder=Path.Combine(Path.GetDirectoryName(file),"moved");Directory.CreateDirectory(folder);string moved=Path.Combine(folder,"cs2.exe");File.WriteAllText(first,"");File.WriteAllText(moved,"");int reads=0;var paths=new GamePrograms(file,g=>null,g=>{reads++;return new[]{moved};});paths.SelectPath("CS2",first);File.Delete(first);Check(paths.Resolve("CS2").Path==moved&&reads==1,"stale path used");paths.Resolve("CS2");Check(reads==1,"install records scanned repeatedly");paths.Resolve("CS2",true);Check(reads==2,"refresh did not rescan");});
+                });
+                Test("running game path takes precedence without changing saved selection",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){string root=Path.GetDirectoryName(file),saved=Path.Combine(root,"cs2.exe"),folder=Path.Combine(root,"active");Directory.CreateDirectory(folder);string active=Path.Combine(folder,"cs2.exe");File.WriteAllText(saved,"");File.WriteAllText(active,"");var paths=new GamePrograms(file,g=>active,g=>new string[0]);paths.SelectPath("CS2",saved);Check(paths.Resolve("CS2").Path==active,"running install ignored");Check(new GamePrograms(file,g=>null,g=>new string[0]).Resolve("CS2").Path==saved,"readonly detection overwrote manual choice");});
+                });
+                Test("invalid game-program XML rejects external entities and preserves the file",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){string invalid="<!DOCTYPE data [<!ENTITY probe SYSTEM 'file:///C:/Windows/win.ini'>]><GameProgramPreferences><LastGame>&probe;</LastGame></GameProgramPreferences>";File.WriteAllText(file,invalid);var paths=new GamePrograms(file,g=>null,g=>new string[0]);Check(paths.LastGame=="CS2"&&paths.Warning!=null&&File.ReadAllText(file)==invalid,"unsafe preferences read or replaced");});
+                });
+                Test("Steam library metadata supports modern and legacy escaped paths",delegate{
+                    var modern=GamePrograms.SteamLibraries("\"libraryfolders\" { \"0\" { \"path\" \"C:\\\\Steam\" } \"1\" { \"path\" \"D:\\\\SteamLibrary\" } }");Check(modern.Length==2&&modern.Contains(@"D:\SteamLibrary"),"modern Steam paths missed");Check(GamePrograms.SteamLibraries("\"1\" \"D:\\\\SteamLibrary\"").Length==1,"legacy Steam library missed");Check(GamePrograms.SteamLibraries("\"path\" \"\\\\\\\\server\\\\share\"").Length==0,"automatic discovery accessed a network share");Check(GamePrograms.ReadVdfValues("\"installdir\" \"Counter-Strike Global Offensive\"")["installdir"]=="Counter-Strike Global Offensive","Steam manifest missed");
+                });
+                Test("expanded NVIDIA catalog has distinct documented values and compound anisotropic control",delegate{
+                    Check(NvidiaGameSettings.Settings.Length==19&&NvidiaGameSettings.Settings.Distinct().Count()==19,"NVIDIA definitions missing or duplicated");foreach(uint setting in NvidiaGameSettings.Settings){var choices=NvidiaGameSettings.Choices(setting);Check(choices.Count>0&&choices.Select(x=>x.value).Distinct().Count()==choices.Count,"invalid choice catalog");foreach(var choice in choices)NvidiaGameSettings.ValidateRawValues(choice.value,NvidiaGameSettings.RawValueCount(setting));}
+                    Check(NvidiaGameSettings.Choices(0x10d2bb16).Any(x=>x.value=="explicit:1|explicit:16"),"16x did not set both override and level");Check(NvidiaGameSettings.Choices(0x107d639d).Any(x=>x.value=="explicit:2"),"Gamma enumeration invalid");Check(NvidiaGameSettings.Choices(0x10fc2d9c).Any(x=>x.value=="explicit:4"),"transparency bit value invalid");Check(NvidiaGameSettings.Effect(0x20c1221e).Contains("OpenGL")&&NvidiaGameSettings.Effect(0x00ac8497).Contains("全局"),"scope limits missing");
+                });
+                Test("NVIDIA compound backup parsing rejects partial and malformed values",delegate{
+                    foreach(string value in new[]{"explicit:1","explicit:1|bad","explicit:-1|explicit:16","explicit:1|explicit:4294967296","explicit:1|explicit:+16"})Throws(delegate{NvidiaGameSettings.ValidateRawValues(value,2);});Check(NvidiaGameSettings.ValidateRawValues("inherited|explicit:16",2).Length==2,"mixed original inheritance not restorable");
+                });
+                Test("NVIDIA background limiter uses paired control-panel IDs, never idle FPS",delegate{
+                    Check(NvidiaGameSettings.Settings.Contains(0x10835005u)&&!NvidiaGameSettings.Settings.Contains(0x10835016u),"idle application ID mislabeled as background limiter");
+                    Check(NvidiaGameSettings.IsBackgroundLimit(0x10835005)&&NvidiaGameSettings.IsBackgroundLimit(0x10835006)&&!NvidiaGameSettings.IsBackgroundLimit(0x10835002),"compatibility routing affects foreground limiter");
+                    Check(NvidiaGameSettings.RawValueCount(0x10835005)==2&&NvidiaGameSettings.RawValueCount(0x10835002)==1,"backup omitted control-panel value");
+                    var choices=NvidiaGameSettings.Choices(0x10835005);Check(choices.Any(x=>x.value=="inherited|inherited"),"inheritance did not restore both parameters");
+                    foreach(var choice in choices){var pair=NvidiaGameSettings.ValidateRawValues(choice.value,2);Check(pair[0]==pair[1],"actual FPS and panel display can diverge");}
+                    Check(choices.Any(x=>x.value=="explicit:30|explicit:30")&&choices.Any(x=>x.value=="explicit:60|explicit:60"),"verified frame-rate options missing");
+                    Throws(delegate{NvidiaGameSettings.ValidateRawValues("explicit:30",NvidiaGameSettings.RawValueCount(0x10835005));});
+                });
+                if(args.Contains("--native-read"))Test("installed game detection is readonly and finds only validated main programs",delegate{
+                    var paths=new GamePrograms();foreach(string game in new[]{"CS2","VALORANT"}){var located=paths.Resolve(game,true);Check(located.Candidates.All(x=>GamePrograms.ValidPath(game,x)!=null),"invalid discovered main program");Console.WriteLine("Game discovery "+game+" source="+located.Source+" candidates="+located.Candidates.Length);}
+                });
+                Test("memory inputs persist without starting cleaner or timer requests",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){Func<MemorySnapshot> read=delegate{return new MemorySnapshot {totalMb=32768,availableMb=8192,minimumTimerMs=.5,maximumTimerMs=15.625,currentTimerMs=1,supported=true};};
+                        using(var cleaner=new MemoryCleaner(file,read)){cleaner.SaveInputs(1024,2048,true,.5);var state=cleaner.Status();Check(!(bool)state.GetType().GetProperty("automatic").GetValue(state,null),"saving enabled automatic cleaning");Check((double)state.GetType().GetProperty("timerRequestedMs").GetValue(state,null)==0,"saving enabled timer");}
+                        using(var reopened=new MemoryCleaner(file,read)){var state=reopened.Status();Check((long)state.GetType().GetProperty("freeThreshold").GetValue(state,null)==2048&&(double)state.GetType().GetProperty("timerTargetMs").GetValue(state,null)==.5,"memory inputs lost after reopen");Check(!(bool)state.GetType().GetProperty("automatic").GetValue(state,null),"reopen started monitoring");}
+                    });
+                });
+                Test("memory preference persistence failure never updates live parameters",delegate{
+                    WithTuning(delegate(string file,FakeTuning ignored){using(var cleaner=new MemoryCleaner(file,delegate{return new MemorySnapshot {totalMb=32768,minimumTimerMs=.5,maximumTimerMs=15.625,supported=true};})){Directory.CreateDirectory(file+".tmp");BackupFailure(delegate{cleaner.SaveInputs(1024,2048,true,1);});Check((long)cleaner.Status().GetType().GetProperty("freeThreshold").GetValue(cleaner.Status(),null)==1024,"failed save changed live threshold");}});
+                });
+                Test("memory input validation prevents incomplete drafts and unsafe XML",delegate{
+                    var info=new MemorySnapshot {totalMb=32768,minimumTimerMs=.5,maximumTimerMs=15.625};foreach(long bad in new long[]{0,127,32769})Throws(delegate{MemoryCleaner.ValidatePreferences(new MemoryCleanerOptions {FreeMb=bad},info);});foreach(double bad in new[]{double.NaN,double.PositiveInfinity,0,.1,16})Throws(delegate{MemoryCleaner.ValidatePreferences(new MemoryCleanerOptions {TimerMs=bad},info);});
+                    WithTuning(delegate(string file,FakeTuning ignored){File.WriteAllText(file,"<!DOCTYPE data [<!ENTITY probe SYSTEM 'file:///C:/Windows/win.ini'>]><MemoryCleanerOptions><FreeMb>&probe;</FreeMb></MemoryCleanerOptions>");using(var cleaner=new MemoryCleaner(file,delegate{return info;})){Check((long)cleaner.Status().GetType().GetProperty("freeThreshold").GetValue(cleaner.Status(),null)==1024,"unsafe memory preferences loaded");}});
+                });
+                Test("NVIDIA predefined VALORANT renderer and launcher are recognized together",delegate{
+                    string path=@"D:\Games\VALORANT\live\ShooterGame\Binaries\Win64\VALORANT-Win64-Shipping.exe";
+                    Check(NvidiaGameSettings.AssociationBlockReason("VALORANT",path,2,NvidiaApps("valorant.exe","valorant-win64-shipping.exe"),true)==null,"verified Valorant preset blocked");
+                    Check(NvidiaGameSettings.AssociationBlockReason("VALORANT",path,2,NvidiaApps(path,@"D:\Games\VALORANT\live\VALORANT.exe"),true)==null,"launcher installation path blocked");
+                    Check(NvidiaGameSettings.AssociationBlockReason("VALORANT",path,2,NvidiaApps(path,@"E:\Other\VALORANT.exe"),true)!=null,"unrelated launcher install accepted");
+                    Check(NvidiaGameSettings.AssociationBlockReason("VALORANT",path,2,NvidiaApps("valorant.exe","cs2.exe"),true)!=null,"cross-game profile accepted");
+                });
+                if(args.Contains("--nvidia-valorant-read"))Test("actual NVIDIA VALORANT main profile reads as manageable (read only)",delegate{
+                    int index=Array.IndexOf(args,"--nvidia-valorant-read");if(index+1>=args.Length)throw new ArgumentException("Missing VALORANT path");using(var nvidia=new NvidiaGameSettings("VALORANT",args[index+1])){var settings=nvidia.Scan();foreach(var setting in settings.Take(8))Check(setting.supported,"VALORANT core setting remains readonly: "+setting.blocked);Console.WriteLine("NVIDIA VALORANT verified: "+settings[0].detail+"; writable="+settings.Count(x=>x.supported));}
+                });
                 Test("NVIDIA predefined CS2 main and alternate executable are writable",delegate{
                     var apps=NvidiaApps("cs2.exe","csgos2.exe");Check(NvidiaGameSettings.AssociationBlockReason("CS2",@"D:\Games\CS2\cs2.exe",2,apps,true)==null,"CS2 aliases were blocked");
                 });
@@ -587,8 +653,9 @@ namespace NexaArena
                     int index=Array.IndexOf(args,"--nvidia-cs2-read");if(index+1>=args.Length)throw new ArgumentException("Missing CS2 path");
                     using(var nvidia=new NvidiaGameSettings("CS2",args[index+1]))
                     {
-                        var settings=nvidia.Scan();Check(settings.Count==8,"incomplete NVIDIA catalog");
-                        foreach(var setting in settings){Check(setting.supported,"NVIDIA CS2 read remains blocked: "+setting.blocked);Check(!string.IsNullOrEmpty(setting.Raw)&&!string.IsNullOrEmpty(setting.Identity),"missing restore data");}
+                        var settings=nvidia.Scan();Check(settings.Count==NvidiaGameSettings.Settings.Length,"incomplete NVIDIA catalog");
+                        foreach(var setting in settings.Take(8)){Check(setting.supported,"NVIDIA CS2 read remains blocked: "+setting.blocked);Check(!string.IsNullOrEmpty(setting.Raw)&&!string.IsNullOrEmpty(setting.Identity),"missing restore data");}
+                        foreach(var setting in settings.Skip(8))Console.WriteLine("NVIDIA capability "+setting.title+" writable="+setting.supported+" current="+setting.current+" reason="+setting.blocked);
                         Console.WriteLine("NVIDIA CS2 verified: "+settings[0].detail+"; writable="+settings.Count(x=>x.supported));
                     }
                 });
