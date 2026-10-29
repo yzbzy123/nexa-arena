@@ -7,6 +7,63 @@ using System.Xml.Serialization;
 
 namespace NexaArena
 {
+    public sealed class ConfigAliasEntry { public string Path="",Name=""; }
+    public sealed class ConfigAliasOptions { public List<ConfigAliasEntry> Entries=new List<ConfigAliasEntry>(); }
+    internal sealed class ConfigAliases
+    {
+        private readonly string file;
+        private readonly Dictionary<string,string> entries=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+        internal string Warning {get;private set;}
+        internal ConfigAliases():this(System.IO.Path.Combine(SavedState.DirectoryPath,"config-aliases.xml")){}
+        internal ConfigAliases(string file)
+        {
+            this.file=file;
+            try
+            {
+                if(!File.Exists(file))return;
+                if(new FileInfo(file).Length>262144)throw new InvalidOperationException("账号备注记录过大。");
+                ConfigAliasOptions data;
+                using(var reader=XmlReader.Create(file,new XmlReaderSettings {DtdProcessing=DtdProcessing.Prohibit,XmlResolver=null,MaxCharactersInDocument=262144}))
+                    data=(ConfigAliasOptions)new XmlSerializer(typeof(ConfigAliasOptions)).Deserialize(reader);
+                if(data.Entries==null||data.Entries.Count>256)throw new InvalidOperationException("账号备注记录数量异常。");
+                foreach(var item in data.Entries)
+                {
+                    if(item==null)throw new InvalidOperationException("账号备注记录不完整。");
+                    string path=Normalize(item.Path),name=ValidateName(item.Name);
+                    if(name.Length==0||entries.ContainsKey(path))throw new InvalidOperationException("账号备注记录为空或重复。");
+                    entries.Add(path,name);
+                }
+            }
+            catch(Exception ex){entries.Clear();Warning="账号备注未读取："+ex.Message;}
+        }
+        private static string Normalize(string path)
+        {
+            if(string.IsNullOrWhiteSpace(path)||!System.IO.Path.IsPathRooted(path)||!string.Equals(System.IO.Path.GetFileName(path),"GameUserSettings.ini",StringComparison.OrdinalIgnoreCase))throw new ArgumentException("账号备注必须关联实际配置路径。");
+            string full=System.IO.Path.GetFullPath(path);if(full.Length>2048)throw new ArgumentException("配置路径过长。");return full;
+        }
+        private static string ValidateName(string name)
+        {name=(name??"").Trim();if(name.Length>40||name.Any(char.IsControl))throw new ArgumentException("账号备注最多 40 个字符，不能包含换行或控制字符。");return name;}
+        internal string Get(string path){string name;return entries.TryGetValue(Normalize(path),out name)?name:"";}
+        internal void Set(string path,string name)
+        {
+            path=Normalize(path);name=ValidateName(name);var latest=new ConfigAliases(file);
+            if(latest.Warning!=null)throw new InvalidOperationException(latest.Warning+" 原记录保留，未覆盖。");
+            var next=new Dictionary<string,string>(latest.entries,StringComparer.OrdinalIgnoreCase);
+            if(name.Length==0)next.Remove(path);else next[path]=name;
+            if(next.Count>256)throw new InvalidOperationException("最多保存 256 个账号备注。");
+            var options=new ConfigAliasOptions {Entries=next.OrderBy(x=>x.Key,StringComparer.OrdinalIgnoreCase).Select(x=>new ConfigAliasEntry {Path=x.Key,Name=x.Value}).ToList()};
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(file));string temp=file+"."+Guid.NewGuid().ToString("N")+".tmp";
+            try
+            {
+                using(var output=File.Create(temp))new XmlSerializer(typeof(ConfigAliasOptions)).Serialize(output,options);
+                var staged=new ConfigAliases(temp);if(staged.Warning!=null||staged.entries.Count!=next.Count||next.Any(x=>staged.Get(x.Key)!=x.Value))throw new IOException("账号备注保存前核对失败。");
+                if(File.Exists(file))File.Replace(temp,file,file+".bak");else File.Move(temp,file);
+                var reopened=new ConfigAliases(file);if(reopened.Warning!=null||reopened.entries.Count!=next.Count||next.Any(x=>reopened.Get(x.Key)!=x.Value))throw new IOException("账号备注保存后核对失败。");
+                entries.Clear();foreach(var pair in next)entries.Add(pair.Key,pair.Value);Warning=null;
+            }
+            finally{if(File.Exists(temp))File.Delete(temp);}
+        }
+    }
     public sealed class ConfigSelectionOptions { public string Path=""; }
     internal sealed class ConfigSelection
     {

@@ -75,6 +75,7 @@ namespace NexaArena
         private readonly ConfigSelection selection=Program.UiPreview?null:new ConfigSelection();
         private bool syncing;
         private readonly WorkbenchSteps progress=new WorkbenchSteps();
+        private readonly Button aliasButton;
         private readonly System.Collections.Generic.List<RadioButton> presetChoices=new System.Collections.Generic.List<RadioButton>();
         internal string SelectedConfig {get{var item=Configs.SelectedItem as ValorantConfigEntry;return item==null?null:item.Path;}}
         private static Panel Surface(){return new Panel {Dock=DockStyle.Fill,BackColor=Color.White,Padding=new Padding(16),Margin=new Padding(0,0,12,0),BorderStyle=BorderStyle.FixedSingle};}
@@ -107,7 +108,11 @@ namespace NexaArena
             var allModes=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=new Padding(0)};allModes.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,76));allModes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));allModes.Controls.Add(ToolUi.Text("全部模式",9F),0,0);Targets.Dock=DockStyle.Top;allModes.Controls.Add(Targets,1,0);fields.Controls.Add(allModes,0,6);
             var operations=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=1,RowCount=11,Margin=new Padding(0)};
             foreach(int h in new[]{32,26,34,38,42,44,48,26,42,28,0})operations.RowStyles.Add(new RowStyle(h==0?SizeType.Percent:SizeType.Absolute,h==0?100:h));right.Controls.Add(operations);
-            operations.Controls.Add(Heading("配置与操作"),0,0);operations.Controls.Add(ToolUi.Text("游戏配置文件",9F),0,1);Configs.Dock=DockStyle.Top;Configs.DropDownWidth=700;operations.Controls.Add(Configs,0,2);
+            operations.Controls.Add(Heading("配置与操作"),0,0);
+            aliasButton=ToolUi.Button("账号备注",EditAlias);
+            aliasButton.FlatAppearance.BorderSize=1;aliasButton.FlatAppearance.BorderColor=ModernTheme.Border;
+            var configHeading=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=new Padding(0)};configHeading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));configHeading.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,82));configHeading.RowStyles.Add(new RowStyle(SizeType.Percent,100));configHeading.Controls.Add(ToolUi.Text("游戏配置文件",9F),0,0);aliasButton.BackColor=Color.White;aliasButton.ForeColor=ModernTheme.Text;aliasButton.Font=ModernTheme.Font(8.5F,FontStyle.Regular);aliasButton.Margin=new Padding(0);aliasButton.AccessibleName="为所选账号配置设置备注";configHeading.Controls.Add(aliasButton,1,0);operations.Controls.Add(configHeading,0,1);
+            Configs.Dock=DockStyle.Top;Configs.DropDownWidth=900;operations.Controls.Add(Configs,0,2);
             Button scan=ToolUi.Button("重新扫描",RefreshConfigs),pick=ToolUi.Button("选择文件",PickConfig);operations.Controls.Add(ToolUi.Buttons(scan,pick),0,3);ConfigHint.Font=ModernTheme.Font(8.5F,FontStyle.Regular);ConfigHint.ForeColor=ModernTheme.Muted;operations.Controls.Add(ConfigHint,0,4);
             Repair=ToolUi.Button("修复所选配置",delegate{});Apply=ToolUi.Button("开始拉伸",delegate{});Restore=ToolUi.Button("恢复原始显示",delegate{});
             foreach(var button in new[]{Repair,Apply,Restore}){button.Dock=DockStyle.Fill;button.Margin=new Padding(0,3,0,5);}
@@ -145,10 +150,26 @@ namespace NexaArena
             using(var picker=new OpenFileDialog {Title="选择本次账号的 VALORANT 配置",Filter="VALORANT 配置|GameUserSettings.ini",FileName="GameUserSettings.ini",CheckFileExists=true})
                 if(picker.ShowDialog(this)==DialogResult.OK){selection.Select(picker.FileName);RefreshConfigs();ConfigHint.Text=selection.SelectedPath;}
         }
+        private void EditAlias()
+        {
+            if(Program.UiPreview)return;var selected=Configs.SelectedItem as ValorantConfigEntry;if(selected==null||selected.IsShared)return;
+            var aliases=new ConfigAliases();if(aliases.Warning!=null)throw new InvalidOperationException(aliases.Warning);
+            using(var dialog=new Form {Text="账号备注",ClientSize=new Size(460,180),FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,StartPosition=FormStartPosition.CenterParent,Font=ModernTheme.Font(10F,FontStyle.Regular),BackColor=Color.White})
+            {
+                var layout=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,Padding=new Padding(18),Margin=new Padding(0)};
+                foreach(int height in new[]{28,36,40,40})layout.RowStyles.Add(new RowStyle(SizeType.Absolute,height));dialog.Controls.Add(layout);
+                layout.Controls.Add(ToolUi.Text("给这个账号起个容易识别的名字",10F),0,0);
+                var input=new TextBox {Text=aliases.Get(selected.Path),MaxLength=40,Dock=DockStyle.Fill,AccessibleName="账号备注名称"};layout.Controls.Add(input,0,1);
+                var hint=ToolUi.Text("例如：自己的大号、朋友小明。留空保存可移除备注。",9F);hint.ForeColor=ModernTheme.Muted;layout.Controls.Add(hint,0,2);
+                var save=ToolUi.Button("保存备注",delegate{aliases.Set(selected.Path,input.Text);dialog.DialogResult=DialogResult.OK;});var cancel=ToolUi.Button("取消",delegate{dialog.DialogResult=DialogResult.Cancel;});layout.Controls.Add(ToolUi.Buttons(save,cancel),0,3);dialog.AcceptButton=save;dialog.CancelButton=cancel;dialog.Shown+=delegate{input.Focus();input.SelectAll();};
+                if(dialog.ShowDialog(this)==DialogResult.OK){RefreshConfigs();ConfigHint.Text=string.IsNullOrWhiteSpace(input.Text)?"账号备注已移除。":"账号备注已保存："+input.Text.Trim();}
+            }
+        }
         internal void UpdateState(bool busy,bool restored)
         {
             bool repaired=!Program.UiPreview&&ConfigSessionStore.Exists&&ConfigSessionStore.LoadRecords().Any(x=>string.Equals(x.ConfigPath,SelectedConfig,StringComparison.OrdinalIgnoreCase)),session=!Program.UiPreview&&(SavedState.Load()!=null||TrueStretchStageStore.Exists||ConfigSessionStore.Exists),selected=SelectedConfig!=null;
             Repair.Enabled=!Program.UiPreview&&!busy&&selected;Apply.Enabled=!Program.UiPreview&&!busy&&repaired;Restore.Enabled=!Program.UiPreview&&!busy&&(session||repaired);
+            var account=Configs.SelectedItem as ValorantConfigEntry;aliasButton.Enabled=!Program.UiPreview&&!busy&&account!=null&&!account.IsShared;
             Repair.BackColor=repaired?Color.White:ModernTheme.Text;Repair.ForeColor=repaired?ModernTheme.Text:Color.White;Apply.BackColor=repaired?ModernTheme.Text:Color.White;Apply.ForeColor=repaired?Color.White:ModernTheme.Text;
             var stage=Program.UiPreview?null:TrueStretchStageStore.Load();
             progress.Update(repaired,stage!=null&&stage.Step>=2,session,restored);

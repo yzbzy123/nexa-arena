@@ -81,6 +81,7 @@ namespace NexaArena
         public string Path { get; private set; }
         public DateTime LastWriteTime { get; private set; }
         public bool IsShared { get; private set; }
+        public string Alias {get;internal set;}
 
         public ValorantConfigEntry(string path)
         {
@@ -94,7 +95,7 @@ namespace NexaArena
         public override string ToString()
         {
             string kind = IsShared ? "公共配置" : "账号配置";
-            return string.Format("[{0}]  {1:yyyy-MM-dd HH:mm}  ·  {2}", kind, LastWriteTime, Path);
+            return (string.IsNullOrEmpty(Alias)?"":Alias+" · ")+string.Format("[{0}]  {1:yyyy-MM-dd HH:mm}  ·  {2}", kind, LastWriteTime, Path);
         }
     }
 
@@ -140,8 +141,8 @@ namespace NexaArena
             }
             string manual=new ConfigSelection().SelectedPath;
             if(!string.IsNullOrEmpty(manual)&&File.Exists(manual))files.Add(manual);
-            var entries=new List<ValorantConfigEntry>();
-            foreach(string path in files)try{entries.Add(new ValorantConfigEntry(path));}catch{}
+            var entries=new List<ValorantConfigEntry>();var aliases=new ConfigAliases();
+            foreach(string path in files)try{entries.Add(new ValorantConfigEntry(path) {Alias=aliases.Get(path)});}catch{}
             return entries
                 .OrderByDescending(entry => entry.LastWriteTime).ToList();
         }
