@@ -23,7 +23,12 @@ web-ui/dist/
 .vite-temp/
 
 # Local design tooling
+/.impeccable/
+/.taste-skill/
 web-ui/.impeccable/
+tools/NvidiaFilterTrial.cs
+tools/NvidiaColorProbe.cs
+tools/MonitorColorProbe.cs
 
 # User and machine-local files
 .env

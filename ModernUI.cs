@@ -12,13 +12,13 @@ namespace NexaArena
 {
     internal static class ModernTheme
     {
-        public static readonly Color Accent = Color.FromArgb(184, 65, 45);
-        public static readonly Color AccentSoft = Color.FromArgb(252, 238, 233);
+        public static readonly Color Accent = Color.FromArgb(0, 102, 204);
+        public static readonly Color AccentSoft = Color.FromArgb(232, 241, 251);
         public static readonly Color Navy = Color.FromArgb(20, 25, 32);
         public static readonly Color NavyLight = Color.FromArgb(36, 43, 52);
-        public static readonly Color Background = Color.FromArgb(245, 246, 247);
+        public static readonly Color Background = Color.FromArgb(244, 247, 250);
         public static readonly Color Card = Color.White;
-        public static readonly Color Border = Color.FromArgb(220, 225, 230);
+        public static readonly Color Border = Color.FromArgb(224, 229, 235);
         public static readonly Color Text = Color.FromArgb(31, 38, 47);
         public static readonly Color Muted = Color.FromArgb(97, 109, 121);
         public static readonly Color Green = Color.FromArgb(23, 125, 94);
@@ -53,7 +53,7 @@ namespace NexaArena
             button.FlatAppearance.BorderColor = Border;
             button.BackColor = backColor;
             button.ForeColor = foreColor;
-            button.Font = Font(10F, FontStyle.Bold);
+            button.Font = Font(9.5F, FontStyle.Regular);
             button.Cursor = Cursors.Hand;
             button.Margin = new Padding(6);
             return button;
@@ -145,26 +145,25 @@ namespace NexaArena
             TextAlign = ContentAlignment.MiddleLeft;
             Padding = new Padding(12, 0, 0, 0);
             Margin = new Padding(0, 3, 0, 3);
-            Font = ModernTheme.Font(9F, FontStyle.Regular);
+            Font = ModernTheme.Font(10F, FontStyle.Regular);
             Cursor = Cursors.Hand;
             ApplyStyle();
         }
 
         private void ApplyStyle()
         {
-            BackColor = selected ? ModernTheme.NavyLight : ModernTheme.Navy;
-            ForeColor = selected ? Color.FromArgb(255, 197, 174) : Color.FromArgb(174, 186, 197);
-            FlatAppearance.MouseOverBackColor = ModernTheme.NavyLight;
+            BackColor = selected ? ModernTheme.AccentSoft : ModernTheme.Background;
+            ForeColor = selected ? ModernTheme.Accent : ModernTheme.Text;
+            FlatAppearance.MouseOverBackColor = ModernTheme.AccentSoft;
         }
 
         protected override void OnPaint(PaintEventArgs pevent)
         {
-            pevent.Graphics.Clear(ModernTheme.Navy);
+            pevent.Graphics.Clear(Parent==null?ModernTheme.Background:Parent.BackColor);
             pevent.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             if (selected || ClientRectangle.Contains(PointToClient(Cursor.Position)))
             {
-                using(var path=ArenaDrawing.Round(new RectangleF(0,0,Width-1,Height-1),8*DeviceScale))
-                using (Brush brush = new SolidBrush(ModernTheme.NavyLight))pevent.Graphics.FillPath(brush,path);
+                using (Brush brush = new SolidBrush(ModernTheme.AccentSoft))pevent.Graphics.FillRectangle(brush,ClientRectangle);
             }
             int icon=(int)(18*DeviceScale);
             ArenaDrawing.Icon(pevent.Graphics,IconName,new Rectangle((int)(14*DeviceScale),(Height-icon)/2,icon,icon),ForeColor);
@@ -274,227 +273,23 @@ namespace NexaArena
             }
         }
 
-        private readonly ModernCard presetCard;
         private readonly TextBox widthBox;
         private readonly TextBox heightBox;
         private readonly ComboBox intermediateBox;
 
+        private readonly NativeDisplayLayout nativeLayout;
+        internal string SelectedConfigPath { get { return nativeLayout.SelectedConfig; } }
+        internal void UpdateNativeState(bool busy=false) { nativeLayout.UpdateState(busy,false); }
         public ModernSwitchPage()
         {
-            Dock = DockStyle.Fill;
-            BackColor = ModernTheme.Background;
-            ResponsiveStack stack = new ResponsiveStack();
-            var pageLayout=new TableLayoutPanel {Dock=DockStyle.Fill,RowCount=1,ColumnCount=2,Margin=new Padding(0),Padding=new Padding(0)};
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100F));
-            pageLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,61F));
-            pageLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,39F));
-            Controls.Add(pageLayout);pageLayout.Controls.Add(stack,0,0);
-            stack.Padding=new Padding(24,12,14,12);
-            var workflow=new TableLayoutPanel {Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Margin=new Padding(0),Padding=new Padding(0,12,24,12)};
-            workflow.RowStyles.Add(new RowStyle(SizeType.Absolute,100F));
-            workflow.RowStyles.Add(new RowStyle(SizeType.Absolute,184F));
-            workflow.RowStyles.Add(new RowStyle(SizeType.Percent,100F));
-            workflow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100F));
-            pageLayout.Controls.Add(workflow,1,0);
-
-            ModernCard statusCard = new ModernCard();
-            statusCard.Height = 100;
-            statusCard.Padding=new Padding(18,10,18,10);
-            statusCard.BackColor=ModernTheme.AccentSoft;
-            TableLayoutPanel statusLayout = new TableLayoutPanel();
-            statusLayout.Dock = DockStyle.Fill;
-            statusLayout.ColumnCount = 1;
-            statusLayout.RowCount = 1;
-            statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            CurrentLabel = ModernTheme.Label("正在读取显示设置…", 17F, FontStyle.Bold, ModernTheme.Accent);
-            OriginalLabel = ModernTheme.Label("尚未保存原始显示状态", 9F, FontStyle.Regular, ModernTheme.Green);
-            TableLayoutPanel statusText = new TableLayoutPanel();
-            statusText.Dock = DockStyle.Fill;
-            statusText.RowCount=2;statusText.ColumnCount=1;
-            statusText.RowStyles.Add(new RowStyle(SizeType.Absolute,36F));
-            statusText.RowStyles.Add(new RowStyle(SizeType.Percent,100F));
-            statusText.Controls.Add(CurrentLabel,0,0);
-            statusText.Controls.Add(OriginalLabel,0,1);
-            statusLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-            statusLayout.Controls.Add(statusText, 0, 0);
-            statusCard.Controls.Add(statusLayout);
-            statusCard.Dock=DockStyle.Fill;
-            statusCard.Margin=new Padding(0,0,0,12);
-            workflow.Controls.Add(statusCard,0,0);
-
-            presetCard = new ModernCard();
-            presetCard.Height = 224;
-            TableLayoutPanel presetLayout = new TableLayoutPanel();
-            presetLayout.Dock = DockStyle.Fill;
-            presetLayout.RowCount = 2;
-            presetLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
-            presetLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            Label presetTitle = ModernTheme.Label("选择目标分辨率", 11F, FontStyle.Bold, ModernTheme.Text);
-            Label presetHint = ModernTheme.Label("选择后不会立即生效", 8.5F, FontStyle.Regular, ModernTheme.Muted);
-            presetHint.TextAlign = ContentAlignment.MiddleRight;
-            TableLayoutPanel titleLine = new TableLayoutPanel();
-            titleLine.Dock = DockStyle.Fill;
-            titleLine.ColumnCount = 2;
-            titleLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55F));
-            titleLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45F));
-            titleLine.Controls.Add(presetTitle, 0, 0);
-            titleLine.Controls.Add(presetHint, 1, 0);
-            Presets = new ModernPresetPanel();
-            Presets.HeightChangedByItems += delegate { presetCard.Height = 84 + Presets.DesiredHeight; };
-            presetLayout.Controls.Add(titleLine, 0, 0);
-            presetLayout.Controls.Add(Presets, 0, 1);
-            presetCard.Controls.Add(presetLayout);
-            stack.Controls.Add(presetCard);
-
-            ModernCard customCard = new ModernCard();
-            customCard.Height = 64;
-            customCard.Padding=new Padding(20,12,20,12);
-            TableLayoutPanel customLayout = new TableLayoutPanel();
-            customLayout.Dock = DockStyle.Fill;
-            customLayout.RowCount = 3;
-            customLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
-            customLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0F));
-            customLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0F));
-            Button customTitle = ModernTheme.Button("＋ 自定义分辨率与中转设置", Color.White, ModernTheme.Text);
-            customTitle.Dock=DockStyle.Fill;customTitle.Margin=new Padding(0);customTitle.TextAlign=ContentAlignment.MiddleLeft;customTitle.FlatAppearance.BorderSize=0;
-            customLayout.Controls.Add(customTitle, 0, 0);
-            TableLayoutPanel customInputs = new TableLayoutPanel();
-            customInputs.Dock = DockStyle.Fill;
-            customInputs.ColumnCount=4;customInputs.RowCount=1;customInputs.Margin=new Padding(0);
-            customInputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50F));
-            customInputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,32F));
-            customInputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50F));
-            customInputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,142F));
-            widthBox = Input("宽度");
-            heightBox = Input("高度");
-            Label multiply = ModernTheme.Label("×", 11F, FontStyle.Bold, ModernTheme.Muted);
-            multiply.AutoEllipsis = false;
-            multiply.Width = 32;
-            multiply.Height = 34;
-            multiply.TextAlign = ContentAlignment.MiddleCenter;
-            widthBox.Dock=heightBox.Dock=DockStyle.Fill;
-            widthBox.Margin=heightBox.Margin=new Padding(0,6,0,0);
-            Button addButton = ModernTheme.Button("添加模式", ModernTheme.Navy, Color.White);
-            addButton.Width = 128;
-            addButton.Height = 36;
-            addButton.Margin = new Padding(12, 0, 0, 0);
-            addButton.Dock=DockStyle.Fill;
-            addButton.Click += AddCustomMode;
-            customInputs.Controls.Add(widthBox,0,0);
-            customInputs.Controls.Add(multiply,1,0);
-            customInputs.Controls.Add(heightBox,2,0);
-            customInputs.Controls.Add(addButton,3,0);
-            Label customHint = ModernTheme.Label("仅显示驱动已支持的分辨率", 8.5F, FontStyle.Regular, ModernTheme.Muted);
-            customHint.Width = 260;
-            customHint.Height = 36;
-            customHint.Margin = new Padding(16, 0, 0, 0);
-            customHint.Dispose();
-            customLayout.Controls.Add(customInputs, 0, 1);
-            FlowLayoutPanel intermediateRow = new FlowLayoutPanel();
-            intermediateRow.Dock = DockStyle.Fill;
-            intermediateRow.FlowDirection = FlowDirection.LeftToRight;
-            intermediateRow.WrapContents = false;
-            Label intermediateLabel = ModernTheme.Label("中转分辨率", 9F, FontStyle.Bold, ModernTheme.Text);
-            intermediateLabel.Width = 120;
-            intermediateLabel.Height = 36;
-            intermediateLabel.Dock=DockStyle.None;
-            intermediateBox = new ComboBox();
-            intermediateBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            intermediateBox.Width = 180;
-            intermediateBox.Font = ModernTheme.Font(9F, FontStyle.Regular);
-            intermediateBox.Margin = new Padding(0,3,12,0);
-            List<DisplayMode> bridgeModes = DisplayModeService.GetSupportedModes()
-                .Where(m => m.Width >= 1024 && m.Width <= 1920 && Math.Abs((double)m.Width / m.Height - 1.6) < 0.025)
-                .GroupBy(m => m.Width + "x" + m.Height).Select(g => g.First()).OrderBy(m => m.Width).ToList();
-            foreach (DisplayMode mode in bridgeModes) intermediateBox.Items.Add(new DisplayModeChoice(mode));
-            int bridgeIndex = -1;
-            for (int i = 0; i < intermediateBox.Items.Count; i++)
-            {
-                DisplayModeChoice choice = (DisplayModeChoice)intermediateBox.Items[i];
-                if (choice.Mode.Width == 1280 && choice.Mode.Height == 800)
-                { bridgeIndex = i; break; }
-            }
-            if (bridgeIndex >= 0) intermediateBox.SelectedIndex = bridgeIndex;
-            intermediateBox.SelectedIndexChanged += delegate
-            {
-                DisplayModeChoice selected = intermediateBox.SelectedItem as DisplayModeChoice;
-                if (selected != null) SaveIntermediateChoice(selected.Key);
-            };
-            intermediateBox.Enabled = false;
-            Label intermediateHint = ModernTheme.Label("自动选择可用中转模式", 8F, FontStyle.Regular, ModernTheme.Muted);
-            intermediateHint.Width = 260;
-            intermediateHint.Height = 36;
-            intermediateHint.Dock=DockStyle.None;
-            intermediateRow.Controls.Add(intermediateLabel);
-            intermediateRow.Controls.Add(intermediateBox);
-            intermediateRow.Controls.Add(intermediateHint);
-            customLayout.Controls.Add(intermediateRow,0,2);
-            customInputs.Visible=intermediateRow.Visible=false;
-            customTitle.Click+=delegate
-            {
-                bool expanded=!customInputs.Visible;
-                customLayout.SuspendLayout();customInputs.Visible=intermediateRow.Visible=expanded;
-                float scale=DeviceDpi/96F;
-                customLayout.RowStyles[1].Height=expanded?44*scale:0;customLayout.RowStyles[2].Height=expanded?38*scale:0;
-                customCard.Height=(int)((expanded?146:64)*scale);customTitle.Text=expanded?"－ 自定义分辨率 · 仅支持驱动已有模式":"＋ 自定义分辨率与中转设置";
-                customLayout.ResumeLayout();
-                if(expanded){stack.PerformLayout();stack.ScrollControlIntoView(customCard);}
-            };
-            customCard.Controls.Add(customLayout);
-            stack.Controls.Add(customCard);
-
-            ModernCard actionsCard = new ModernCard();
-            actionsCard.Dock=DockStyle.Fill;
-            actionsCard.Margin=new Padding(0,0,0,12);
-            actionsCard.Padding = new Padding(10);
-            TableLayoutPanel actions = new TableLayoutPanel();
-            actions.Dock = DockStyle.Fill;
-            actions.ColumnCount = 1;
-            actions.RowCount = 4;
-            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));
-            actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
-            actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
-            actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-            SwitchButton = ModernTheme.Button("一键真实拉伸", ModernTheme.Accent, Color.White);
-            SwitchButton.Dock = DockStyle.Fill;
-            CalibrationButton = ModernTheme.Button("修复游戏配置", ModernTheme.Border, ModernTheme.Text);
-            CalibrationButton.Enabled = true;
-            CalibrationButton.Dock = DockStyle.Fill;
-            RestoreButton = ModernTheme.Button("恢复", Color.White, ModernTheme.Text);
-            RestoreButton.Dock = DockStyle.Fill;
-            actions.Controls.Add(SwitchButton, 0, 0);
-            actions.Controls.Add(CalibrationButton, 0, 1);
-            actions.Controls.Add(RestoreButton, 0, 2);
-            AutoRestoreOnGameExit = new CheckBox();
-            AutoRestoreOnGameExit.Text = "退出后自动恢复分辨率、监视器和桌面图标";
-            AutoRestoreOnGameExit.Checked = LoadAutoRestoreChoice();
-            AutoRestoreOnGameExit.Dock = DockStyle.Fill;
-            AutoRestoreOnGameExit.Font = ModernTheme.Font(8.5F, FontStyle.Regular);
-            AutoRestoreOnGameExit.ForeColor = ModernTheme.Text;
-            AutoRestoreOnGameExit.Margin = new Padding(10,2,0,0);
-            AutoRestoreOnGameExit.CheckedChanged += delegate { SaveAutoRestoreChoice(AutoRestoreOnGameExit.Checked); };
-            actions.Controls.Add(AutoRestoreOnGameExit,0,3);
-            actionsCard.Controls.Add(actions);
-            workflow.Controls.Add(actionsCard,0,1);
-
-            ModernCard footerCard = new ModernCard();
-            footerCard.Dock=DockStyle.Fill;
-            footerCard.Margin=new Padding(0,0,0,0);
-            footerCard.Padding=new Padding(16,8,16,8);
-            footerCard.BackColor=ModernTheme.Background;
-            TableLayoutPanel footer = new TableLayoutPanel();
-            footer.Dock = DockStyle.Fill;
-            footer.RowCount = 2;
-            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
-            StatusLabel = ModernTheme.Label("先退出游戏修复配置，再执行一键真实拉伸。", 9F, FontStyle.Regular, ModernTheme.Text);
-            Label keys = ModernTheme.Label("Ctrl + Alt + S  切换     Ctrl + Alt + H  恢复", 8.5F, FontStyle.Regular, ModernTheme.Muted);
-            ShortcutLabel = keys;
-            footer.Controls.Add(StatusLabel, 0, 0);
-            footer.Controls.Add(keys, 0, 1);
-            footerCard.Controls.Add(footer);
-            workflow.Controls.Add(footerCard,0,2);
+            Dock=DockStyle.Fill;BackColor=ModernTheme.Background;
+            nativeLayout=new NativeDisplayLayout();Controls.Add(nativeLayout);
+            Presets=nativeLayout.Presets;SwitchButton=nativeLayout.Apply;CalibrationButton=nativeLayout.Repair;RestoreButton=nativeLayout.Restore;
+            CurrentLabel=nativeLayout.Current;OriginalLabel=nativeLayout.Original;StatusLabel=nativeLayout.Status;ShortcutLabel=nativeLayout.Shortcuts;
+            widthBox=nativeLayout.WidthInput;heightBox=nativeLayout.HeightInput;intermediateBox=nativeLayout.Intermediate;
+            AutoRestoreOnGameExit=nativeLayout.AutoRestore;AutoRestoreOnGameExit.Checked=LoadAutoRestoreChoice();
+            AutoRestoreOnGameExit.CheckedChanged+=delegate { SaveAutoRestoreChoice(AutoRestoreOnGameExit.Checked); };
+            nativeLayout.AddMode+=AddCustomMode;
         }
 
         private static string IntermediateChoicePath
@@ -837,7 +632,7 @@ namespace NexaArena
                     new[]{"退出游戏并选择目标","修复游戏配置","开始真实拉伸","进入 3D 画面","确认应用目标","直接更换目标","恢复显示"},
                     new[]{
                         "完全退出 Valorant，以管理员身份运行本工具，选择需要的 4:3、5:4 或自定义目标分辨率。",
-                        "点击“修复游戏配置”。工具会备份检测到的配置，并锁定为目标分辨率、全屏窗口＋填充。",
+                        "先核对所选配置属于本次账号，再点击“修复所选配置”。工具会备份该文件，并设置目标分辨率、全屏窗口＋填充。",
                         "点击“一键真实拉伸”并确认。工具会保存当前实际分辨率与刷新率、禁用监视器，再自动选择可用中转。",
                         "中转窗口出现后启动或返回游戏，进入能看到武器和 HUD 的靶场或对局；无需手动修改画面模式。",
                         "进入 3D 画面后 Alt+Tab 返回确认窗口点击“是”；点击“否”会恢复原始显示和配置。",
@@ -868,13 +663,13 @@ namespace NexaArena
                         "进入 COUNTER-STRIKE 2，点击上方“画面滤镜”模块。",
                         "竞技清晰与高对比适合追求边缘和层次；职业均衡、职业鲜艳和敌人突出提供不同强度。",
                         "喜欢偏暖色调可优先选择“暖色竞技 · 推荐”，它会降低蓝色通道但不过度泛黄。",
-                        "点击“应用滤镜”即可生效；可直接点击另一套预设切换，不需要先恢复。",
-                        "点击“恢复原始颜色”或正常退出工具会还原启动前的 Gamma Ramp；HDR 可能阻止滤镜生效。"
-                    }, "滤镜作用于 Windows 显示输出，不注入 CS2；无边框窗口模式通常最稳定。"),
+                        "硬件模式通过 DDC/CI 调整主显示器的对比度和 RGB，作用于该显示器全部画面，不依赖独占全屏或无边框模式。",
+                        "应用前保存真实硬件原值，写后读取核验；点击“恢复原始硬件颜色”或正常退出时还原。失败保留备份，异常退出后可重新打开再恢复。"
+                    }, "四套为硬件近似效果，不复现旧 Gamma 曲线。显示器必须支持并开启 DDC/CI；不保证与其他显示器显示一致。"),
                 BuildGuide("游戏优化", "按游戏选择 Windows 系统优化选项。",
                     new[]{"选择游戏","调整进程调度","配置图形首选项"},
                     new[]{
-                        "在 WebView2 版游戏优化页选择 CS2 或 VALORANT，先查看进程是否正在运行。",
+                        "在游戏优化页选择 CS2 或 VALORANT，先查看所选游戏和主程序路径。",
                         "可仅对选中的游戏进程应用高于普通的调度优先级；不会结束后台程序。",
                         "可打开 Windows 图形设置，为该游戏主程序选择高性能 GPU 或窗口化优化。"
                     }, "图形设置由 Windows 管理；游戏模式和电源模式属于全局设置，会明确标注。")
@@ -1007,6 +802,7 @@ namespace NexaArena
         private HotkeyManager hotkeyManager;
         private readonly ToolboxSettingsPage toolboxSettingsPage;
         private readonly GameAudioPage audioPage;
+        private readonly NativeOptimizerPage optimizerPage;
         private NotifyIcon trayIcon;
         private ContextMenuStrip trayMenu;
         private string hotkeyNotice;
@@ -1015,61 +811,37 @@ namespace NexaArena
         {
             Text = Program.UiPreview ? "Nexa Arena · UI 预览（不修改系统设置）" : "Nexa Arena · CS2 / VALORANT 游戏工具箱";
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(1180, 800);
-            MinimumSize = new Size(1040, 720);
+            ClientSize = new Size(1380, 900);
+            MinimumSize = new Size(1200, 800);
             DoubleBuffered = true;
             BackColor = ModernTheme.Background;
-            Font = ModernTheme.Font(9F, FontStyle.Regular);
+            Font = ModernTheme.Font(10F, FontStyle.Regular);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
             catch { Icon = SystemIcons.Application; }
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
 
-            TableLayoutPanel shell = new TableLayoutPanel();
-            shell.Dock = DockStyle.Fill;
-            shell.ColumnCount = 1;
-            shell.RowCount = 4;
-            shell.Margin = new Padding(0);
-            shell.Padding = new Padding(0);
-            shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 70F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
-            Controls.Add(shell);
-
-            TableLayoutPanel commandBar = new TableLayoutPanel();
-            commandBar.Dock = DockStyle.Fill;
-            commandBar.Margin = new Padding(0);
-            commandBar.BackColor = ModernTheme.Navy;
-            commandBar.ColumnCount = 2;
-            commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 212F));
-            commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            shell.Controls.Add(commandBar, 0, 0);
-            commandBar.Controls.Add(new ArenaBrand(), 0, 0);
-            Label commandHint = ModernTheme.Label("CS2  /  VALORANT   ·   DISPLAY  /  AIM  /  PERFORMANCE",
-                8.5F, FontStyle.Regular, Color.FromArgb(174, 186, 197));
-            commandHint.TextAlign = ContentAlignment.MiddleRight;
-            commandHint.Margin = new Padding(0, 0, 24, 0);
-            commandBar.Controls.Add(commandHint, 1, 0);
-
-            FlowLayoutPanel navigation = new FlowLayoutPanel();
-            navigation.Dock = DockStyle.Fill;
-            navigation.FlowDirection = FlowDirection.LeftToRight;
-            navigation.WrapContents = false;
-            navigation.AutoScroll = false;
-            navigation.Margin = new Padding(0);
-            navigation.Padding = new Padding(22, 3, 22, 2);
-            navigation.BackColor = ModernTheme.Navy;
-            shell.Controls.Add(navigation, 0, 1);
-
+            var shell=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,Margin=new Padding(0),Padding=new Padding(0),BackColor=ModernTheme.Background};
+            shell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,210));shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));shell.RowStyles.Add(new RowStyle(SizeType.Absolute,62));shell.RowStyles.Add(new RowStyle(SizeType.Percent,100));Controls.Add(shell);
+            var commandBar=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,Margin=new Padding(0),Padding=new Padding(0),BackColor=ModernTheme.Background};
+            commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,270));commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,270));
+            commandBar.RowStyles.Add(new RowStyle(SizeType.Percent,100));commandBar.Controls.Add(new WorkbenchBrand(),0,0);shell.Controls.Add(commandBar,0,0);shell.SetColumnSpan(commandBar,2);
+            var gameChoice=ToolUi.Choice("VALORANT","CS2");gameChoice.AccessibleName="当前游戏";
+            var scopeHost=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,Margin=new Padding(0),Padding=new Padding(0,12,0,12)};
+            scopeHost.RowStyles.Add(new RowStyle(SizeType.Percent,100));scopeHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));scopeHost.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,250));scopeHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));scopeHost.Controls.Add(new WorkbenchGameScope(gameChoice),1,0);commandBar.Controls.Add(scopeHost,1,0);
+            var versionText=ToolUi.Text(Program.UiPreview?"安全预览 · 不修改系统":"Nexa Arena 1.0.0",9F);versionText.TextAlign=ContentAlignment.MiddleRight;versionText.Padding=new Padding(0,0,24,0);versionText.ForeColor=ModernTheme.Muted;commandBar.Controls.Add(versionText,2,0);
+            var navigationRow=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=new Padding(0),BackColor=ModernTheme.Background};
+            navigationRow.RowStyles.Add(new RowStyle(SizeType.Percent,100));navigationRow.RowStyles.Add(new RowStyle(SizeType.Absolute,100));
+            var navigation=new FlowLayoutPanel {Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=false,Margin=new Padding(0),Padding=new Padding(8,10,8,0),BackColor=ModernTheme.Background};
+            navigationRow.Controls.Add(navigation,0,0);shell.Controls.Add(navigationRow,0,1);
             TableLayoutPanel content = new TableLayoutPanel();
             content.Dock = DockStyle.Fill;
             content.Margin = new Padding(0);
             content.RowCount = 2;
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 78F));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 64F));
+            content.BackColor=Color.White;content.Padding=new Padding(0,0,0,8);
             content.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            shell.Controls.Add(content, 0, 2);
+            shell.Controls.Add(content, 1, 1);
 
             TableLayoutPanel topbar = new TableLayoutPanel();
             topbar.ColumnCount = 2;
@@ -1077,14 +849,14 @@ namespace NexaArena
             topbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
             topbar.Dock = DockStyle.Fill;
             topbar.Margin = new Padding(0);
-            topbar.Padding = new Padding(26, 10, 26, 8);
-            topbar.BackColor = ModernTheme.Background;
+            topbar.Padding = new Padding(22, 10, 22, 4);
+            topbar.BackColor = Color.White;
             content.Controls.Add(topbar, 0, 0);
-            pageTitle = ModernTheme.Label("VALORANT", 19F, FontStyle.Bold, ModernTheme.Text);
+            pageTitle = ModernTheme.Label("游戏画面", 18F, FontStyle.Bold, ModernTheme.Text);
             var titleGroup = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0) };
             pageSubtitle = ModernTheme.Label("显示比例、游戏配置与恢复", 8.5F, FontStyle.Regular, ModernTheme.Muted);
-            pageTitle.Dock = DockStyle.Top; pageTitle.Height = 36;
-            pageSubtitle.Dock = DockStyle.Top; pageSubtitle.Height = 23;
+            pageTitle.Dock = DockStyle.Top; pageTitle.Height = 28;
+            pageSubtitle.Dock = DockStyle.Top; pageSubtitle.Height = 20;
             titleGroup.Controls.Add(pageSubtitle); titleGroup.Controls.Add(pageTitle);
             topbar.Controls.Add(titleGroup, 0, 0);
             topbar.RowCount = 1;
@@ -1099,28 +871,34 @@ namespace NexaArena
             pageHost.BackColor = ModernTheme.Background;
             content.Controls.Add(pageHost, 0, 1);
 
-            Label footer = ModernTheme.Label("免费游戏工具箱     作者：2ndWind     QQ群：1105050795  ·  点击复制群号",
-                8F, FontStyle.Regular, Color.FromArgb(174, 186, 197));
-            footer.BackColor = ModernTheme.Navy;
-            footer.Padding = new Padding(26, 0, 0, 0);
+            Label footer = ModernTheme.Label("免费游戏工具箱\r\n作者：2ndWind\r\nQQ群：1105050795",
+                8F, FontStyle.Regular, ModernTheme.Muted);
+            footer.BackColor = ModernTheme.Background;
+            footer.Padding = new Padding(20, 0, 8, 8);
             footer.Cursor = Cursors.Hand;
             footer.AccessibleName = "复制QQ群号 1105050795";
             footer.Click += delegate { ToolUi.Copy("1105050795"); UpdateStatus("QQ群号已复制：1105050795"); };
-            shell.Controls.Add(footer, 0, 3);
+            navigationRow.Controls.Add(footer,0,1);
             switchPage = new ModernSwitchPage();
-            CrosshairLibraryPage valorantCrosshairs = new CrosshairLibraryPage(true);
-            CrosshairLibraryPage cs2Crosshairs = new CrosshairLibraryPage(false);
+            NativeCrosshairLibrary valorantCrosshairs = new NativeCrosshairLibrary(true);
+            NativeCrosshairLibrary cs2Crosshairs = new NativeCrosshairLibrary(false);
             GameFilterPage cs2Filters = new GameFilterPage();
             ModernTutorialPage tutorialPage = new ModernTutorialPage();
-            GameSectionPage valorantSection = new GameSectionPage("真实拉伸", switchPage, "准心代码", valorantCrosshairs);
-            ToolTabs cs2Section = new ToolTabs(new[] { "准心代码", "画面滤镜", "指令生成器" }, cs2Crosshairs, cs2Filters, new Cs2CommandsPage());
             SensitivityPage sensitivityPage = new SensitivityPage(delegate { return toolboxSettings; }, ApplyToolboxSettings);
+            var gameVisuals=new NativeGamePage(switchPage,cs2Filters);
+            var gameCrosshairs=new NativeGamePage(valorantCrosshairs,cs2Crosshairs);
+            var aimSection=new ToolTabs(new[]{"准心","灵敏度换算","CS2 练习指令"},gameCrosshairs,sensitivityPage,new Cs2CommandsPage());
             audioPage = new GameAudioPage();
             toolboxSettingsPage = new ToolboxSettingsPage(delegate { return toolboxSettings; }, ApplyToolboxSettings);
-            ToolTabs toolsSection = new ToolTabs(new[] { "游戏音频" }, audioPage);
-            string[] names = { "VALORANT", "COUNTER-STRIKE 2", "灵敏度中心", "游戏工具", "托盘 / 快捷键", "使用指南" };
-            string[] navNames = { "VALORANT", "CS2", "灵敏度", "工具", "快捷键", "指南" };
-            pages = new Control[] { valorantSection, cs2Section, sensitivityPage, toolsSection, toolboxSettingsPage, tutorialPage };
+            optimizerPage=new NativeOptimizerPage();var optimizer=optimizerPage;
+            gameChoice.SelectedItem=Program.UiPreview?"VALORANT":optimizer.SelectedGame;
+            gameVisuals.SelectGame(Convert.ToString(gameChoice.SelectedItem));gameCrosshairs.SelectGame(Convert.ToString(gameChoice.SelectedItem));
+            string[] names = { "游戏画面", "准心与灵敏度", "游戏音频", "游戏优化", "快捷键", "使用指南" };
+            string[] navNames = names;
+            pages = new Control[] { gameVisuals, aimSection, audioPage, optimizer, toolboxSettingsPage, tutorialPage };
+            optimizer.SelectGame(Convert.ToString(gameChoice.SelectedItem));
+            optimizer.BusyChanged+=delegate(bool busy){gameChoice.Enabled=!busy;};
+            gameChoice.SelectedIndexChanged+=delegate{if(optimizer.IsBusy){gameChoice.SelectedItem=optimizer.SelectedGame;return;}string game=Convert.ToString(gameChoice.SelectedItem);optimizer.SelectGame(game);gameVisuals.SelectGame(optimizer.SelectedGame);gameCrosshairs.SelectGame(optimizer.SelectedGame);};
             navButtons = new ModernNavButton[names.Length];
             for (int i = 0; i < pages.Length; i++)
             {
@@ -1130,8 +908,8 @@ namespace NexaArena
                 pageHost.Controls.Add(pages[i]);
                 ModernNavButton button = new ModernNavButton(navNames[i]);
                 button.Selected = i == 0;
-                button.IconName = new[] {"aim","monitor","aim","bolt","settings","guide"}[i];
-                button.Margin = new Padding(4, 0, 4, 0);
+                button.IconName = new[] {"monitor","aim","audio","settings","settings","guide"}[i];
+                button.Margin = new Padding(0, 0, 0, 8);
                 button.Click += delegate { ShowPage(index, names[index]); };
                 navButtons[i] = button;
                 navigation.Controls.Add(button);
@@ -1139,10 +917,10 @@ namespace NexaArena
             Action arrangeNavigation = delegate
             {
                 navigation.SuspendLayout();
-                int width = Math.Max(130, (navigation.ClientSize.Width - navigation.Padding.Horizontal - navButtons.Length * 8) / navButtons.Length);
+                int width = Math.Max(150, navigation.ClientSize.Width - navigation.Padding.Horizontal);
                 foreach (ModernNavButton button in navButtons)
                 {
-                    button.Height=42;
+                    button.Height=52;
                     button.Width=width;
                 }
                 navigation.ResumeLayout();
@@ -1187,7 +965,7 @@ namespace NexaArena
             Shown += delegate
             {
                 arrangeNavigation();
-                ShowPage(0, "VALORANT");
+                ShowPage(0, "游戏画面");
                 RefreshDisplayLabels();
                 if (!Program.UiPreview) { WarnIfStateExists(); displayRefreshTimer.Start(); gameExitMonitorTimer.Start(); }
                 UpdateHotkeyHint();
@@ -1266,7 +1044,7 @@ namespace NexaArena
             }
             pages[index].BringToFront();
             pageTitle.Text = title;
-            string[] subtitles={"显示比例、游戏配置与恢复。","准星、画面滤镜与实用指令。","跨游戏换算与 DPI 调整。","音频、帧率与性能管理。","托盘行为与快捷键。","按功能查找操作步骤。"};
+            string[] subtitles={"选择游戏与显示模式，核对配置后操作；人物仅示意比例。","游戏准心、跨游戏灵敏度换算与 CS2 练习指令。","输出设备、麦克风和应用会话。","按游戏管理系统设置、内存和驱动配置。","托盘行为与快捷键。","按功能查找操作步骤。"};
             pageSubtitle.Text=subtitles[index];
         }
 
@@ -1427,6 +1205,7 @@ namespace NexaArena
         private void BeginSwitch()
         {
             if (Program.UiPreview) return;
+            if(DisplayFilterService.IsBusy){UpdateStatus("硬件颜色操作正在核验，请完成后再切换显示模式。");return;}
             if (restoreJob.IsRunning || switchInProgress) return;
             switchInProgress = true;
             try { BeginSwitchCore(); }
@@ -1576,11 +1355,12 @@ namespace NexaArena
             try
             {
                 // 若上一次修复会话未完成，先还原，避免把已修改文件当成“原始备份”。
-                if(ConfigSessionStore.Exists) ConfigSessionStore.Restore();
                 DisplayMode target=switchPage.Presets.SelectedMode;
                 if(target==null) throw new InvalidOperationException("请先选择目标分辨率。");
-                List<ValorantConfigEntry> configs = ValorantLocator.FindConfigFiles();
-                if (configs.Count == 0) throw new InvalidOperationException("没有找到 Valorant 配置文件。");
+                string selected=ConfigSelection.Validate(switchPage.SelectedConfigPath);
+                if(MessageBox.Show(this,"将备份并修复以下配置为 "+target.Width+" × "+target.Height+"、全屏窗口＋填充：\r\n\r\n"+selected+"\r\n\r\n请确认属于本次登录的账号。恢复时会还原文件内容和只读属性。","确认所选配置",MessageBoxButtons.OKCancel,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2)!=DialogResult.OK)return;
+                if(ConfigSessionStore.Exists) ConfigSessionStore.Restore();
+                List<ValorantConfigEntry> configs = new List<ValorantConfigEntry>{new ValorantConfigEntry(selected)};
                 List<ConfigRepairRecord> records=new List<ConfigRepairRecord>();
                 foreach (ValorantConfigEntry config in configs)
                 {
@@ -1595,7 +1375,8 @@ namespace NexaArena
                 }
                 switchPage.CalibrationButton.Text="配置已修复";
                 UpdateStatus("已按目标 " + target.Width + " × " + target.Height + " 修复并锁定 " + configs.Count + " 个配置。");
-                MessageBox.Show("配置处理完成。\r\n\r\n已将扫描到的配置统一为目标 "+target.Width+"×"+target.Height+"、全屏窗口＋填充，并在拉伸会话中保持锁定。点击恢复会还原原配置和文件属性。",
+                switchPage.UpdateNativeState();
+                MessageBox.Show("配置处理完成。\r\n\r\n已将所选配置设为 "+target.Width+"×"+target.Height+"、全屏窗口＋填充，并在拉伸会话中保持锁定。未修改其他账号。点击恢复会还原原配置和文件属性。",
                     "修复完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -1677,9 +1458,9 @@ namespace NexaArena
 
         private void SyncStretchSessionConfigs(int width,int height)
         {
-            List<ValorantConfigEntry> configs=ValorantLocator.SelectActiveConfigs(ValorantLocator.FindConfigFiles());
-            if(configs.Count==0) throw new InvalidOperationException("没有找到可同步的 Valorant 配置文件。");
             List<ConfigRepairRecord> records=ConfigSessionStore.LoadRecords();
+            if(records.Count==0)throw new InvalidOperationException("请先选择并修复本次账号的游戏配置。");
+            List<ValorantConfigEntry> configs=records.Select(x=>new ValorantConfigEntry(ConfigSelection.Validate(x.ConfigPath))).ToList();
             foreach(ValorantConfigEntry config in configs)
             {
                 ConfigRepairRecord existing=records.FirstOrDefault(x=>
@@ -1785,6 +1566,7 @@ namespace NexaArena
         private void Restore()
         {
             if (Program.UiPreview) return;
+            if(DisplayFilterService.IsBusy){UpdateStatus("硬件颜色操作正在核验，请完成后再恢复显示模式。");return;}
             if (restoreJob.IsRunning || switchInProgress) return;
             if (TrueStretchStageStore.Exists || SavedState.Load() != null)
             {
@@ -1836,6 +1618,7 @@ namespace NexaArena
         private void RestoreTrueStretch()
         {
             if (Program.UiPreview) return;
+            if(DisplayFilterService.IsBusy){UpdateStatus("硬件颜色操作正在核验，请完成后再恢复显示模式。");return;}
             if (restoreJob.IsRunning) return;
             try
             {
@@ -1952,6 +1735,7 @@ namespace NexaArena
             {
                 DisplayMode current = DisplayModeService.GetCurrent();
                 switchPage.CurrentLabel.Text = current.ToString();
+                switchPage.UpdateNativeState(switchInProgress);
                 headerStatus.Text = string.Format("{0} × {1}  ·  {2} Hz", current.Width, current.Height, current.RefreshRate);
             }
             catch (Exception ex)
@@ -1969,6 +1753,7 @@ namespace NexaArena
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
             if (Program.UiPreview) return;
+            if(optimizerPage.IsBusy||DisplayFilterService.IsBusy){e.Cancel=true;MessageBox.Show(this,"优化或硬件颜色操作仍在进行，请等待核验结束后再退出。","正在完成操作",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
             if (restoreJob.IsRunning || switchInProgress)
             {
                 e.Cancel = true;
@@ -1984,7 +1769,8 @@ namespace NexaArena
                 RestoreTrueStretch();
                 return;
             }
-            DisplayFilterService.Restore();
+            try{DisplayFilterService.Restore();}
+            catch(Exception ex){e.Cancel=true;MessageBox.Show(this,"原始颜色未确认还原，工具暂不退出。请恢复原显示器连接后再试。\r\n"+ex.Message,"颜色还原未完成",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
             displayRefreshTimer.Stop();
             gameExitMonitorTimer.Stop();
             gameStateMonitorTimer.Stop();

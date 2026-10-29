@@ -133,12 +133,16 @@ namespace NexaArena
                 if (!Directory.Exists(root)) continue;
                 try
                 {
-                    foreach (string file in Directory.EnumerateFiles(root, "GameUserSettings.ini", SearchOption.AllDirectories))
+                    foreach (string file in ConfigSelection.Enumerate(root))
                         files.Add(System.IO.Path.GetFullPath(file));
                 }
                 catch { }
             }
-            return files.Select(path => new ValorantConfigEntry(path))
+            string manual=new ConfigSelection().SelectedPath;
+            if(!string.IsNullOrEmpty(manual)&&File.Exists(manual))files.Add(manual);
+            var entries=new List<ValorantConfigEntry>();
+            foreach(string path in files)try{entries.Add(new ValorantConfigEntry(path));}catch{}
+            return entries
                 .OrderByDescending(entry => entry.LastWriteTime).ToList();
         }
 
@@ -158,12 +162,14 @@ namespace NexaArena
             HashSet<string> roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             AddConfigRoot(roots, System.IO.Path.Combine(local, "VALORANT", "Saved", "Config"));
+            foreach(string basePath in new[]{Environment.GetEnvironmentVariable("LOCALAPPDATA"),System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"AppData","Local")})
+                if(!string.IsNullOrEmpty(basePath))AddConfigRoot(roots,System.IO.Path.Combine(basePath,"VALORANT","Saved","Config"));
 
             foreach (DriveInfo drive in DriveInfo.GetDrives())
             {
                 try
                 {
-                    if (!drive.IsReady || drive.DriveType == DriveType.CDRom) continue;
+                    if (drive.DriveType == DriveType.CDRom || drive.DriveType == DriveType.Network || !drive.IsReady) continue;
                     AddInstallRoot(roots, System.IO.Path.Combine(drive.RootDirectory.FullName, "Tencent Games", "VALORANT"));
                     AddInstallRoot(roots, System.IO.Path.Combine(drive.RootDirectory.FullName, "Riot Games", "VALORANT"));
                     AddInstallRoot(roots, System.IO.Path.Combine(drive.RootDirectory.FullName, "VALORANT"));

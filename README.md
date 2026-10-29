@@ -1,13 +1,13 @@
 # Nexa Arena
 
-免费的 CS2 / VALORANT Windows 游戏工具箱。
+免费的 CS2 / VALORANT 原生 Windows 游戏工具箱。
 
 版本：**1.0.0** · 作者：**2ndWind** · QQ群：**1105050795**
 
 ## 功能
 
 - VALORANT 显示比例与真实拉伸流程、配置修复、显示模式、监视器及桌面图标恢复。
-- CS2 准心分享码、静态预览、画面滤镜和本地练习指令。
+- CS2 准心分享码、静态预览和本地练习指令；画面滤镜保留四套预设，但当前适配未完成，暂不执行颜色写入。
 - 灵敏度与 DPI 换算：等转身距离、水平微调匹配、自定义比例。
 - 输出设备、麦克风、应用音频会话、托盘与快捷键。
 - 系统调优、启动项、计划任务、可选服务、DNS 和驱动高级属性。
@@ -19,33 +19,31 @@
 
 ## 下载与运行
 
-从 [Releases](https://github.com/yzbzy123/nexa-arena/releases) 下载完整压缩包，解压后运行 NexaArena.exe。
+项目下载入口：[Releases](https://github.com/yzbzy123/nexa-arena/releases)。原生运行文件为 NexaArena.exe。
 
 - Windows 10 / 11，64 位。
-- 需要 .NET Framework 4.8 和 Microsoft Edge WebView2 Evergreen Runtime。
-- EXE、WebView2 DLL、web 目录及授权文本必须放在一起。
-- 系统设置和设备操作需要管理员权限。
+- 需要 .NET Framework 4.8。
+- 默认原生程序不需要 Node.js 或 WebView2；图标、人物示意图和第三方声明嵌入 EXE。
+- 启动时请求管理员权限，用于系统设置和设备操作。
 
 工具不会添加未经确认的自动优化，不注入游戏，也不绕过反作弊。请按页面流程执行拉伸，并在设备调校前备份重要数据。
 
 ## 从源码构建
 
-需要 PowerShell 7、Node.js 24、npm 和 Windows .NET Framework 编译器。
+需要 PowerShell 7 和 Windows .NET Framework 编译器。默认构建为 C# / WinForms：
 
 ```powershell
-pwsh -File ./tools/Setup-WebView2.ps1
-npm ci --prefix web-ui
 pwsh -File ./build.ps1 -NoPublish
 ```
 
-构建结果在 dist-web。运行 build.ps1 可生成完整 release 运行包。
+构建结果为 `dist/NexaArena.exe`。关闭正在运行的 Nexa Arena 后，运行 `pwsh -File ./build.ps1` 会将 EXE 复制到 `release`。`-Preview` 生成不应用系统操作的原生预览程序。
 
 ```powershell
 pwsh -File ./tools/Test-Toolbox.ps1
 pwsh -File ./tools/Test-Restore.ps1
 ```
 
-Test-Toolbox.ps1 -NativeRead 增加本机只读枚举，不应用系统调优。界面预览通过 build-web.ps1 -Preview 生成。
+`Test-Toolbox.ps1 -NativeRead` 增加本机只读枚举，不应用系统调优。`web-ui` 与 `build-web.ps1` 保留作网页界面开发参考，不参与默认原生构建与分发。
 
 ## 操作与恢复边界
 
@@ -55,8 +53,8 @@ Test-Toolbox.ps1 -NativeRead 增加本机只读枚举，不应用系统调优。
 - MSI 与中断路由属于实验性驱动配置，重启后可能出现设备异常。
 - 配置读取不证明运行时效果；工具不保证帧率或延迟收益。
 
-运行时设置位于 %LOCALAPPDATA%\\NexaArena。目录说明见 [WORKSPACE.md](WORKSPACE.md)，安全说明见 [SECURITY.md](SECURITY.md)。
+运行时设置位于 `%LOCALAPPDATA%\NexaArena`。目录说明见 [WORKSPACE.md](WORKSPACE.md)，产品与原生界面规范见 [PRODUCT.md](PRODUCT.md) 和 [DESIGN.md](DESIGN.md)，安全说明见 [SECURITY.md](SECURITY.md)。
 
 ## 许可证
 
-项目代码采用 [MIT License](LICENSE)。第三方组件与相关声明遵循各自授权，详见 [第三方声明](assets/ThirdPartyNotices.txt)、WebView2 SDK 授权和运行包内前端授权文本。
+项目代码采用 [MIT License](LICENSE)。第三方组件与相关声明遵循各自授权，详见 [第三方声明](assets/ThirdPartyNotices.txt) 及程序内授权说明。可选前端和宿主按其依赖保留相应授权文本。

@@ -13,7 +13,7 @@ namespace NexaArena
 {
     internal static class ToolUi
     {
-        public static Label Text(string text,float size=9F)
+        public static Label Text(string text,float size=10F)
         {
             Label label=ModernTheme.Label(text,size,FontStyle.Regular,ModernTheme.Text);
             label.AutoEllipsis=false;return label;
@@ -28,7 +28,7 @@ namespace NexaArena
             ModernCard card=new ModernCard {Height=height};
             body=new Panel {Dock=DockStyle.Fill,Margin=new Padding(0)};
             Label heading=ModernTheme.Label(title,11F,FontStyle.Bold,ModernTheme.Text);heading.Dock=DockStyle.Top;heading.Height=32;
-            hint=Text(description,8.5F);hint.ForeColor=ModernTheme.Muted;hint.Dock=DockStyle.Top;hint.Height=50;
+            hint=Text(description,9F);hint.ForeColor=ModernTheme.Muted;hint.Dock=DockStyle.Top;hint.Height=50;
             card.Controls.Add(body);card.Controls.Add(hint);card.Controls.Add(heading);return card;
         }
         public static TableLayoutPanel Grid(params int[] heights)
@@ -47,7 +47,7 @@ namespace NexaArena
         }
         public static ComboBox Choice(params string[] choices)
         {
-            ComboBox box=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Font=ModernTheme.Font(9F,FontStyle.Regular)};
+            ComboBox box=new NativeChoiceBox {DropDownStyle=ComboBoxStyle.DropDownList,Font=ModernTheme.Font(10F,FontStyle.Regular)};
             box.FlatStyle=FlatStyle.Flat;box.BackColor=ModernTheme.Background;box.ForeColor=ModernTheme.Text;
             box.Items.AddRange(choices);if(box.Items.Count>0)box.SelectedIndex=0;return box;
         }
@@ -59,12 +59,12 @@ namespace NexaArena
         public static CheckBox Check(string text,bool selected=false) {return new CheckBox {Text=text,Checked=selected,Dock=DockStyle.Fill,AutoSize=false,Margin=new Padding(0)};}
         public static Button Button(string text,Action action)
         {
-            Button button=ModernTheme.Button(text,ModernTheme.Accent,Color.White);button.Dock=DockStyle.Fill;button.Margin=new Padding(3);
+            Button button=ModernTheme.Button(text,ModernTheme.Text,Color.White);button.Dock=DockStyle.Fill;button.Margin=new Padding(3);
             button.Click+=delegate {try{action();}catch(Exception ex){MessageBox.Show(ex.Message,"Nexa Arena",MessageBoxButtons.OK,MessageBoxIcon.Warning);}};return button;
         }
         public static TableLayoutPanel Buttons(params Button[] buttons)
         {
-            var row=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=buttons.Length,RowCount=1,Margin=new Padding(0)};
+            var row=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=buttons.Length,RowCount=1,Margin=new Padding(0)};row.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             for(int i=0;i<buttons.Length;i++){if(i>0){buttons[i].BackColor=Color.White;buttons[i].ForeColor=ModernTheme.Text;buttons[i].FlatAppearance.BorderSize=1;buttons[i].FlatAppearance.BorderColor=ModernTheme.Border;}row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100F/buttons.Length));row.Controls.Add(buttons[i],i,0);}return row;
         }
         public static TextBox Output() {return new TextBox {Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Dock=DockStyle.Fill,Font=new Font("Consolas",9F),BackColor=Color.White};}
@@ -89,11 +89,11 @@ namespace NexaArena
             Dock=DockStyle.Fill;ModulePages=pages;
             var root=new TableLayoutPanel {Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Margin=new Padding(0)};
             root.RowStyles.Add(new RowStyle(SizeType.Absolute,52));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));Controls.Add(root);
-            var bar=new FlowLayoutPanel {Dock=DockStyle.Fill,Padding=new Padding(24,6,0,6),Margin=new Padding(0),BackColor=ModernTheme.Background,WrapContents=false};
+            var bar=new FlowLayoutPanel {Dock=DockStyle.Fill,Padding=new Padding(24,6,0,6),Margin=new Padding(0),BackColor=Color.White,WrapContents=false};
             var host=new Panel {Dock=DockStyle.Fill,Margin=new Padding(0)};root.Controls.Add(bar,0,0);root.Controls.Add(host,0,1);
             Button[] tabs=new Button[pages.Length];
-            Action<int> select=delegate(int selected){for(int j=0;j<pages.Length;j++){pages[j].Visible=j==selected;tabs[j].BackColor=j==selected?ModernTheme.AccentSoft:ModernTheme.Background;tabs[j].ForeColor=j==selected?ModernTheme.Accent:ModernTheme.Muted;}pages[selected].BringToFront();};
-            for(int i=0;i<pages.Length;i++){int index=i;pages[i].Dock=DockStyle.Fill;host.Controls.Add(pages[i]);tabs[i]=ModernTheme.Button(names[i],ModernTheme.Background,ModernTheme.Muted);tabs[i].Size=new Size(146,38);tabs[i].Margin=new Padding(0,0,8,0);tabs[i].Click+=delegate{select(index);};bar.Controls.Add(tabs[i]);}select(0);
+            Action<int> select=delegate(int selected){for(int j=0;j<pages.Length;j++){pages[j].Visible=j==selected;((WorkbenchTabButton)tabs[j]).Selected=j==selected;}pages[selected].BringToFront();};
+            for(int i=0;i<pages.Length;i++){int index=i;pages[i].Dock=DockStyle.Fill;host.Controls.Add(pages[i]);tabs[i]=new WorkbenchTabButton {Text=names[i]};tabs[i].Size=new Size(146,38);tabs[i].Margin=new Padding(0,0,8,0);tabs[i].Click+=delegate{select(index);};bar.Controls.Add(tabs[i]);}select(0);
         }
     }
 
@@ -141,9 +141,8 @@ namespace NexaArena
             });
             ToolUi.Wide(inputGrid,4,ToolUi.Buttons(copyResult,swapDirection,saveInputs));
             var output=ToolUi.Card("参考结果","",226,out body,out methodHint);stack.Controls.Add(output);
-            output.BackColor=ModernTheme.Navy;
-            foreach(Label label in output.Controls.OfType<Label>())label.ForeColor=Color.FromArgb(171,194,179);
-            var values=ToolUi.Grid(56,48);body.Controls.Add(values);result=ModernTheme.Label("",25F,FontStyle.Bold,Color.FromArgb(192,237,170));details=ToolUi.Text("");details.ForeColor=Color.FromArgb(186,207,193);ToolUi.Wide(values,0,result);ToolUi.Wide(values,1,details);
+            output.BackColor=Color.White;
+            var values=ToolUi.Grid(56,48);body.Controls.Add(values);result=ModernTheme.Label("",25F,FontStyle.Bold,ModernTheme.Accent);details=ToolUi.Text("");details.ForeColor=ModernTheme.Muted;ToolUi.Wide(values,0,result);ToolUi.Wide(values,1,details);
             source.SelectedIndexChanged+=delegate{Calculate();};target.SelectedIndexChanged+=delegate{Calculate();};
             formula.SelectedIndexChanged+=delegate{Calculate();};customRatio.ValueChanged+=delegate{Calculate();};
             sourceResolution.SelectedIndexChanged+=delegate{Calculate();};targetResolution.SelectedIndexChanged+=delegate{Calculate();};

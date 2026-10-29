@@ -1,66 +1,23 @@
-param(
-    [switch]$Clean,
-    [switch]$NoPublish,
-    [switch]$LegacyUi
-)
-
-$ErrorActionPreference = 'Stop'
-$projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-if (-not $LegacyUi) {
-    Push-Location (Join-Path $projectRoot 'web-ui')
-    try {
-        & npm run build
-        if ($LASTEXITCODE -ne 0) { throw '网页界面构建失败。' }
-    } finally { Pop-Location }
-    & (Join-Path $projectRoot 'build-web.ps1') -Publish:(-not $NoPublish)
-    if ($LASTEXITCODE -ne 0) { throw 'WebView2 宿主构建失败。' }
-    return
+param([switch]$Clean,[switch]$NoPublish,[switch]$LegacyUi,[switch]$Preview)
+$ErrorActionPreference='Stop'
+$projectRoot=$PSScriptRoot
+$compiler='C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+$output=Join-Path $projectRoot 'dist'
+if(-not(Test-Path -LiteralPath $output)){New-Item -ItemType Directory -Path $output|Out-Null}
+$name=if($Preview){'NexaArenaPreview.exe'}else{'NexaArena.exe'}
+$entry=if($Preview){'/main:NexaArena.ToolboxPreview'}else{'/main:NexaArena.Program'}
+$manifest=Join-Path $projectRoot $(if($Preview){'tools\ui-probe.manifest'}else{'app.manifest'})
+$sources=@('NexaArena.cs','ModernUI.cs','NativeDisplay.cs','NativeOptimizer.cs','NativeCrosshairs.cs','ConfigSelection.cs','ArenaDesign.cs','ValorantLocator.cs','TrueStretchService.cs','RestoreService.cs','ToolboxCore.cs','SensitivityProjection.cs','DesktopIntegration.cs','DesktopIconLayout.cs','GameAudio.cs','GameOptimizer.cs','GamePrograms.cs','GameProcessProfiles.cs','SystemTuning.cs','MemoryCleaner.cs','OptimizationManagers.cs','NvidiaGameSettings.cs','DeviceTuning.cs','AppxManagement.cs','ReadinessReport.cs','SystemRepairJobs.cs','ToolboxPages.cs','Cs2Crosshair.cs','ArenaModules.cs')|ForEach-Object {Join-Path $projectRoot $_}
+$sources+=Join-Path $projectRoot 'HardwareColorFilters.cs'
+if($Preview){$sources+=Join-Path $projectRoot 'tools\ToolboxPreview.cs'}
+$references=@('/reference:System.dll','/reference:System.Core.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll','/reference:System.Xml.dll','/reference:System.Management.dll','/reference:System.Security.dll','/reference:System.Web.Extensions.dll','/reference:Microsoft.CSharp.dll')
+& $compiler /nologo /target:winexe /platform:x64 /optimize+ $entry "/out:$output\$name" "/win32manifest:$manifest" "/win32icon:$projectRoot\assets\NexaArena.ico" "/resource:$projectRoot\assets\ThirdPartyNotices.txt,NexaArena.ThirdPartyNotices" "/resource:$projectRoot\assets\aspect-model.png,NexaArena.AspectModel" @references @sources
+if($LASTEXITCODE -ne 0){throw '原生桌面程序编译失败。'}
+if(-not $NoPublish -and -not $Preview){
+    if(Get-Process -Name NexaArena -ErrorAction SilentlyContinue){throw 'Nexa Arena 仍在运行，请从托盘正常退出后再替换。'}
+    $release=Join-Path $projectRoot 'release'
+    if(-not(Test-Path -LiteralPath $release)){New-Item -ItemType Directory -Path $release|Out-Null}
+    Copy-Item -LiteralPath (Join-Path $output $name) -Destination (Join-Path $release 'NexaArena.exe') -Force
+    Write-Host "Published: $release\NexaArena.exe"
 }
-
-$outputDirectory = Join-Path $projectRoot 'dist'
-$releaseDirectory = Join-Path $projectRoot 'release'
-$compiler = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-
-if (-not (Test-Path -LiteralPath $compiler)) {
-    throw "找不到 .NET Framework C# 编译器：$compiler"
-}
-
-if ($Clean -and (Test-Path -LiteralPath $outputDirectory)) {
-    Remove-Item -LiteralPath $outputDirectory -Recurse -Force
-}
-New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
-
-& $compiler /nologo /target:winexe /platform:anycpu /optimize+ /debug:pdbonly `
-    /out:"$outputDirectory\NexaArena.exe" `
-    /win32manifest:"$projectRoot\app.manifest" `
-    /win32icon:"$projectRoot\assets\NexaArena.ico" `
-    /reference:System.dll `
-    /reference:System.Core.dll `
-    /reference:System.Drawing.dll `
-    /reference:System.Windows.Forms.dll `
-    /reference:System.Xml.dll `
-    "/resource:$projectRoot\assets\ThirdPartyNotices.txt,NexaArena.ThirdPartyNotices" `
-    "$projectRoot\NexaArena.cs" `
-    "$projectRoot\ModernUI.cs" `
-    "$projectRoot\ArenaDesign.cs" `
-    "$projectRoot\ValorantLocator.cs" `
-    "$projectRoot\TrueStretchService.cs" `
-    "$projectRoot\RestoreService.cs" `
-    "$projectRoot\ToolboxCore.cs" `
-    "$projectRoot\SensitivityProjection.cs" `
-    "$projectRoot\DesktopIntegration.cs" `
-    "$projectRoot\DesktopIconLayout.cs" `
-    "$projectRoot\GameAudio.cs" `
-    "$projectRoot\GameOptimizer.cs" `
-    "$projectRoot\SystemTuning.cs" `
-    "$projectRoot\MemoryCleaner.cs" `
-    "$projectRoot\ToolboxPages.cs" `
-    "$projectRoot\Cs2Crosshair.cs" `
-    "$projectRoot\ArenaModules.cs"
-
-if ($LASTEXITCODE -ne 0) {
-    throw "编译失败，退出代码：$LASTEXITCODE"
-}
-
-Write-Host "Legacy WinForms build (not published): $outputDirectory\NexaArena.exe"
+Write-Host "Built native Windows app: $output\$name"

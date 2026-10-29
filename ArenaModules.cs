@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace NexaArena
@@ -251,54 +252,124 @@ namespace NexaArena
         public double Contrast;
     }
 
+    internal interface IGammaOutput
+    {
+        ushort[] Read();
+        void Write(ushort[] ramp);
+    }
+
+    internal sealed class GammaFilterSession
+    {
+        private readonly IGammaOutput output;
+        private ushort[] original,desired;
+        internal bool Active {get;private set;}
+        internal bool HasOriginal {get{return original!=null;}}
+        internal string Status {get;private set;}
+        internal GammaFilterSession(IGammaOutput output){this.output=output;Status="尚未应用滤镜。";}
+        internal static bool Matches(ushort[] a,ushort[] b)
+        {return a!=null&&b!=null&&a.Length==768&&b.Length==768&&a.Zip(b,(x,y)=>Math.Abs((int)x-y)<=256).All(x=>x);}
+        private static ushort[] Valid(ushort[] ramp)
+        {if(ramp==null||ramp.Length!=768)throw new InvalidOperationException("驱动未返回完整颜色参数。");return ramp;}
+        internal void Apply(ushort[] ramp)
+        {
+            Active=false;
+            try
+            {
+                var current=Valid(output.Read());if(original==null)original=(ushort[])current.Clone();desired=(ushort[])Valid(ramp).Clone();
+                output.Write(desired);
+                if(!Matches(Valid(output.Read()),desired))throw new InvalidOperationException("写入后核验不一致，滤镜未确认生效；可能被 HDR、游戏或驱动覆盖。");
+                Active=true;Status="颜色参数已核验；显示效果仍以实际画面为准。";
+            }
+            catch(Exception ex){Status="未确认生效："+ex.Message;throw;}
+        }
+        internal void Check()
+        {
+            if(!Active)return;
+            try
+            {
+                if(Matches(Valid(output.Read()),desired)){Status="颜色参数已核验；显示效果仍以实际画面为准。";return;}
+                Active=false;Status="颜色参数已被覆盖，当前滤镜未保持。此次核验未写入颜色。";
+            }
+            catch(Exception ex){Active=false;Status="滤镜监测已暂停："+ex.Message+" 原始颜色备份仍保留。";}
+        }
+        internal void Restore()
+        {
+            Active=false;if(original==null){Status="尚无需要还原的颜色备份。";return;}
+            try
+            {
+                if(!Matches(Valid(output.Read()),original))output.Write(original);
+                if(!Matches(Valid(output.Read()),original))throw new InvalidOperationException("原始颜色还原后核验失败。");
+                original=null;desired=null;Status="原始颜色参数已还原并核验。";
+            }
+            catch(Exception ex){Status="还原未完成："+ex.Message+" 原值备份仍保留，请重试。";throw;}
+        }
+    }
+
+    internal sealed class NativeGammaOutput:IGammaOutput
+    {
+        [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]
+        private struct DisplayDevice
+        {public int cb;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)]public string DeviceName;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string DeviceString;public int StateFlags;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string DeviceID;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string DeviceKey;}
+        [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern bool EnumDisplayDevices(string device,uint index,ref DisplayDevice result,uint flags);
+        [DllImport("gdi32.dll",CharSet=CharSet.Unicode)]private static extern IntPtr CreateDC(string driver,string device,string output,IntPtr mode);
+        [DllImport("gdi32.dll")]private static extern bool DeleteDC(IntPtr dc);
+        [DllImport("gdi32.dll")]private static extern bool GetDeviceGammaRamp(IntPtr dc,IntPtr ramp);
+        [DllImport("gdi32.dll")]private static extern bool SetDeviceGammaRamp(IntPtr dc,IntPtr ramp);
+        private readonly string device,identity;
+        internal NativeGammaOutput(string device){this.device=device;identity=Identity();}
+        private string Identity()
+        {
+            var found=new List<string>();
+            for(uint i=0;i<32;i++){var monitor=new DisplayDevice {cb=Marshal.SizeOf(typeof(DisplayDevice))};if(!EnumDisplayDevices(device,i,ref monitor,1))break;if((monitor.StateFlags&1)!=0)found.Add(monitor.DeviceID+"|"+monitor.DeviceKey);}
+            if(found.Count==0)throw new InvalidOperationException("目标显示器不可用或无法确认身份；未修改其他显示器。");
+            return string.Join(";",found.OrderBy(x=>x,StringComparer.Ordinal).ToArray());
+        }
+        private ushort[] Transfer(ushort[] values)
+        {
+            if(Identity()!=identity)throw new InvalidOperationException("显示设备已变化，请恢复原显示器连接后重试；不会写入其他显示器。");
+            IntPtr dc=CreateDC("DISPLAY",device,null,IntPtr.Zero);if(dc==IntPtr.Zero)throw new InvalidOperationException("无法访问目标显示器颜色控制。");
+            IntPtr memory=IntPtr.Zero;
+            try
+            {
+                memory=Marshal.AllocHGlobal(1536);short[] signed=new short[768];
+                if(values==null){if(!GetDeviceGammaRamp(dc,memory))throw new InvalidOperationException("驱动无法读取 Gamma Ramp。");Marshal.Copy(memory,signed,0,768);return signed.Select(x=>unchecked((ushort)x)).ToArray();}
+                if(values.Length!=768)throw new ArgumentException("颜色参数不完整。");signed=values.Select(x=>unchecked((short)x)).ToArray();Marshal.Copy(signed,0,memory,768);
+                if(!SetDeviceGammaRamp(dc,memory))throw new InvalidOperationException("驱动拒绝颜色写入；请检查 HDR 或驱动支持。");return null;
+            }
+            finally{if(memory!=IntPtr.Zero)Marshal.FreeHGlobal(memory);DeleteDC(dc);}
+        }
+        public ushort[] Read(){return Transfer(null);}
+        public void Write(ushort[] ramp){Transfer(ramp);}
+    }
+
     internal static class DisplayFilterService
     {
-        [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
-        [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
-        [DllImport("gdi32.dll")] private static extern bool GetDeviceGammaRamp(IntPtr hdc, IntPtr ramp);
-        [DllImport("gdi32.dll")] private static extern bool SetDeviceGammaRamp(IntPtr hdc, IntPtr ramp);
-
-        private static ushort[] original;
-
-        public static void Apply(FilterPreset preset)
+        private static int busy;
+        private static string status="硬件滤镜适配未完成，已停用写入与自动还原。现有原值备份保留，不将 DDC 读数判定为实际颜色已恢复。";
+        internal static bool HardwareAvailable {get{return false;}}
+        internal static bool IsBusy {get{return System.Threading.Volatile.Read(ref busy)!=0;}}
+        internal static string Status {get{return status;}}
+        private static HardwareColorSession Session(HardwareColorStore store,string target=null)
         {
-            IntPtr hdc = GetDC(IntPtr.Zero);
-            if (hdc == IntPtr.Zero) throw new InvalidOperationException("无法访问显示器颜色控制。");
-            IntPtr memory = Marshal.AllocHGlobal(768 * 2);
-            try
-            {
-                if (original == null)
-                {
-                    if (!GetDeviceGammaRamp(hdc, memory)) throw new InvalidOperationException("显卡驱动不支持 Gamma Ramp。");
-                    original = new ushort[768];
-                    short[] signed = new short[768];
-                    Marshal.Copy(memory, signed, 0, 768);
-                    for (int i = 0; i < 768; i++) original[i] = unchecked((ushort)signed[i]);
-                }
-                ushort[] ramp = BuildRamp(preset);
-                short[] values = ramp.Select(x => unchecked((short)x)).ToArray();
-                Marshal.Copy(values, 0, memory, values.Length);
-                if (!SetDeviceGammaRamp(hdc, memory)) throw new InvalidOperationException("应用滤镜失败，可能被 HDR 或显卡驱动阻止。");
-            }
-            finally { Marshal.FreeHGlobal(memory); ReleaseDC(IntPtr.Zero, hdc); }
+            var record=store.Load();if(record!=null&&target!=null&&record.Original.Device!=target)throw new InvalidOperationException("请先恢复上一个显示器的硬件原值。");
+            return new HardwareColorSession(new PhysicalColorOutput(record==null?target??Screen.PrimaryScreen.DeviceName:record.Original.Device),store);
         }
+        private static void Begin()
+        {if(Program.UiPreview)throw new InvalidOperationException("安全预览不修改显示颜色。");if(!HardwareAvailable)throw new InvalidOperationException("硬件颜色适配未通过实际 OSD 对照，已停用写入；不会继续修改显示器。");if(System.Threading.Interlocked.CompareExchange(ref busy,1,0)!=0)throw new InvalidOperationException("硬件颜色操作尚未完成，请等待核验结果。");status="正在读取显示器、备份和核验，请等待…";}
+        private static void Execute(Action action){try{action();}catch(Exception ex){status="未完成："+ex.Message;try{var record=new HardwareColorStore().Load();if(record!=null)status+="\r\n备份原值："+HardwareColorSession.Describe(record.Original);}catch{}throw;}finally{System.Threading.Interlocked.Exchange(ref busy,0);}}
+        private static Task RunAsync(Action action){Begin();return Task.Run(()=>Execute(action));}
+        private static void Run(Action action){Begin();Execute(action);}
+        private static void Change(FilterPreset preset,string target)
+        {var session=Session(new HardwareColorStore(),target);try{session.Apply(preset);}finally{status=session.Status;}}
+        private static void Undo()
+        {var store=new HardwareColorStore();if(store.Load()==null){status="尚无需要还原的硬件颜色备份。";return;}var session=Session(store);try{session.Restore();}finally{status=session.Status;}}
+        public static void Apply(FilterPreset preset){string target=Screen.PrimaryScreen.DeviceName;Run(()=>Change(preset,target));}
+        internal static Task ApplyAsync(FilterPreset preset){string target=Screen.PrimaryScreen.DeviceName;return RunAsync(()=>Change(preset,target));}
+        internal static Task VerifyAsync(){return RunAsync(()=>{var store=new HardwareColorStore();if(store.Load()==null){status="尚无硬件滤镜会话。";return;}var session=Session(store);session.Verify();status=session.Status;});}
+        internal static Task RestoreAsync(){if(!HardwareAvailable)return Task.FromResult(0);return RunAsync(Undo);}
+        public static void Restore(){if(Program.UiPreview||!HardwareAvailable)return;Run(Undo);}
 
-        public static void Restore()
-        {
-            if (original == null) return;
-            IntPtr hdc = GetDC(IntPtr.Zero);
-            IntPtr memory = Marshal.AllocHGlobal(768 * 2);
-            try
-            {
-                short[] values = original.Select(x => unchecked((short)x)).ToArray();
-                Marshal.Copy(values, 0, memory, values.Length);
-                SetDeviceGammaRamp(hdc, memory);
-                original = null;
-            }
-            finally { Marshal.FreeHGlobal(memory); ReleaseDC(IntPtr.Zero, hdc); }
-        }
-
-        private static ushort[] BuildRamp(FilterPreset preset)
+        internal static ushort[] BuildRamp(FilterPreset preset)
         {
             ushort[] result = new ushort[768];
             double[] channels = { preset.Red, preset.Green, preset.Blue };
@@ -325,12 +396,22 @@ namespace NexaArena
             Controls.Add(stack);
             ModernCard intro = new ModernCard();
             intro.Height = 140;
-            Label introText = ModernTheme.Label("CS2 轻量画面滤镜\r\n使用显示器 Gamma Ramp 调整冷暖与对比度，不注入游戏。无边框窗口模式效果最稳定；HDR 可能阻止滤镜。",
+            Label introText = ModernTheme.Label("画面滤镜 · 适配未完成\r\n当前 DDC 读数未能对应显示器 OSD，暂不执行硬件写入或自动还原。\r\n四套预设保留，但不能视为已经可用；不回退到 Gamma 或私有驱动试写。",
                 9.5F, FontStyle.Bold, ModernTheme.Text);
             introText.AutoEllipsis = false;
             intro.Controls.Add(introText);
             stack.Controls.Add(intro);
-            List<FilterPreset> filters = Presets();
+            var stateCard=new ModernCard {Height=152};
+            var stateLayout=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=new Padding(0)};
+            stateLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,32));stateLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            var verify=ModernTheme.Button("核验当前状态（只读）",Color.White,ModernTheme.Text);verify.Dock=DockStyle.Fill;verify.Enabled=!Program.UiPreview&&DisplayFilterService.HardwareAvailable;
+            var filterStatus=ModernTheme.Label(Program.UiPreview?"安全预览 · 不读写屏幕颜色参数。":DisplayFilterService.Status,9F,FontStyle.Regular,ModernTheme.Text);filterStatus.AutoEllipsis=false;filterStatus.AccessibleName="滤镜核验状态";
+            Func<Func<Task>,Task> work=async action=>{Enabled=false;filterStatus.Text="正在读取显示器、备份和核验，请等待…";try{await action();}catch(Exception ex){MessageBox.Show(this,ex.Message,"硬件颜色操作未完成",MessageBoxButtons.OK,MessageBoxIcon.Warning);}finally{if(!IsDisposed){Enabled=true;filterStatus.Text=DisplayFilterService.Status;}}};
+            verify.Click+=async delegate{await work(DisplayFilterService.VerifyAsync);};
+            var reset=ModernTheme.Button("恢复原始硬件颜色",Color.White,ModernTheme.Text);reset.Dock=DockStyle.Fill;reset.Enabled=!Program.UiPreview&&DisplayFilterService.HardwareAvailable;reset.Click+=async delegate{await work(DisplayFilterService.RestoreAsync);};
+            var actions=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=new Padding(0)};actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));actions.Controls.Add(verify,0,0);actions.Controls.Add(reset,1,0);
+            stateLayout.Controls.Add(actions,0,0);stateLayout.Controls.Add(filterStatus,0,1);stateCard.Controls.Add(stateLayout);stack.Controls.Add(stateCard);
+            List<FilterPreset> filters = Presets().Where(x=>new[]{"竞技清晰","职业均衡","职业鲜艳","高对比"}.Contains(x.Name)).ToList();
             for (int i = 0; i < filters.Count; i += 2)
             {
                 TableLayoutPanel row = new TableLayoutPanel();
@@ -338,17 +419,10 @@ namespace NexaArena
                 row.ColumnCount = 2;
                 row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
                 row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-                row.Controls.Add(FilterCard(filters[i]), 0, 0);
-                if (i + 1 < filters.Count) row.Controls.Add(FilterCard(filters[i + 1]), 1, 0);
+                row.Controls.Add(FilterCard(filters[i],preset=>work(()=>DisplayFilterService.ApplyAsync(preset))), 0, 0);
+                if (i + 1 < filters.Count) row.Controls.Add(FilterCard(filters[i + 1],preset=>work(()=>DisplayFilterService.ApplyAsync(preset))), 1, 0);
                 stack.Controls.Add(row);
             }
-            ModernCard resetCard = new ModernCard();
-            resetCard.Height = 72;
-            Button reset = ModernTheme.Button("恢复原始颜色", Color.White, ModernTheme.Text);
-            reset.Dock = DockStyle.Fill;
-            reset.Click += delegate { DisplayFilterService.Restore(); };
-            resetCard.Controls.Add(reset);
-            stack.Controls.Add(resetCard);
         }
 
         internal static List<FilterPreset> Presets()
@@ -363,7 +437,7 @@ namespace NexaArena
             };
         }
 
-        private static Control FilterCard(FilterPreset filter)
+        private static Control FilterCard(FilterPreset filter,Func<FilterPreset,Task> applyOperation)
         {
             ModernCard card = new ModernCard();
             card.Dock = DockStyle.Fill;
@@ -386,15 +460,13 @@ namespace NexaArena
             text.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             text.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
             text.Controls.Add(ModernTheme.Label(filter.Name, 10F, FontStyle.Bold, ModernTheme.Text), 0, 0);
-            text.Controls.Add(ModernTheme.Label(filter.Description, 8F, FontStyle.Regular, ModernTheme.Muted), 0, 1);
+            string description=filter.Name=="职业均衡"?"轻微暖色与对比，保留原有层次":filter.Name=="职业鲜艳"?"增加暖色与对比，硬件近似鲜艳效果":filter.Name=="竞技清晰"?"适度暖色与对比，硬件近似清晰效果":"增强硬件对比，亮暗层次变化更明显";
+            text.Controls.Add(ModernTheme.Label(description, 8F, FontStyle.Regular, ModernTheme.Muted), 0, 1);
             Button apply = ModernTheme.Button("应用滤镜", ModernTheme.Accent, Color.White);
+            apply.Enabled=!Program.UiPreview&&DisplayFilterService.HardwareAvailable;
             apply.Dock = DockStyle.Fill;
             apply.Margin = new Padding(0, 4, 0, 0);
-            apply.Click += delegate
-            {
-                try { DisplayFilterService.Apply(filter); }
-                catch (Exception ex) { MessageBox.Show(ex.Message, "滤镜", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-            };
+            apply.Click += async delegate {await applyOperation(filter);};
             text.Controls.Add(apply, 0, 2);
             layout.Controls.Add(text, 1, 0);
             card.Controls.Add(layout);

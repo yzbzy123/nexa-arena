@@ -7,13 +7,18 @@ $sources=@('NexaArena.cs','ModernUI.cs','ArenaDesign.cs','ValorantLocator.cs','T
 $sources+=Join-Path $projectRoot 'OptimizationManagers.cs'
 $sources+=Join-Path $projectRoot 'GameProcessProfiles.cs'
 $sources+=Join-Path $projectRoot 'GamePrograms.cs'
+$sources+=Join-Path $projectRoot 'ConfigSelection.cs'
+$sources+=Join-Path $projectRoot 'NativeDisplay.cs'
+$sources+=Join-Path $projectRoot 'NativeOptimizer.cs'
+$sources+=Join-Path $projectRoot 'NativeCrosshairs.cs'
 $sources+=Join-Path $projectRoot 'NvidiaGameSettings.cs'
 $sources+=Join-Path $projectRoot 'DeviceTuning.cs'
 $sources+=Join-Path $projectRoot 'AppxManagement.cs'
 $sources+=Join-Path $projectRoot 'ReadinessReport.cs'
 $sources+=Join-Path $projectRoot 'SystemRepairJobs.cs'
+$sources+=Join-Path $projectRoot 'HardwareColorFilters.cs'
 $references=@('/reference:System.dll','/reference:System.Core.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll','/reference:System.Xml.dll','/reference:System.Management.dll','/reference:System.Security.dll','/reference:System.Web.Extensions.dll','/reference:Microsoft.CSharp.dll')
-$resources=@("/resource:$projectRoot\assets\ThirdPartyNotices.txt,NexaArena.ThirdPartyNotices")
+$resources=@("/resource:$projectRoot\assets\ThirdPartyNotices.txt,NexaArena.ThirdPartyNotices","/resource:$projectRoot\assets\aspect-model.png,NexaArena.AspectModel")
 $testExe=Join-Path $PSScriptRoot 'ToolboxTests.exe'
 & $compiler /nologo /target:exe /platform:anycpu /main:NexaArena.ToolboxTests "/out:$testExe" @references @resources @sources "$PSScriptRoot\ToolboxTests.cs"
 if($LASTEXITCODE -ne 0){throw '工具箱测试编译失败。'}
